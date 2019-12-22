@@ -84,6 +84,13 @@ type
     jump_stack: seq[int]
  
 # Dialog / QuickOpen
+proc is_hidden(path: string): bool =
+  let dirs = path.split("/")
+  for dir in dirs:
+    if dir.startswith("."):
+      return true
+  return false
+
 proc index_project(dir: string): seq[string] =
   for item in walk_dir(dir):
     case item.kind:
@@ -93,8 +100,10 @@ proc index_project(dir: string): seq[string] =
 
 proc index_project(): seq[FileEntry] =
   let paths = index_project(get_current_dir())
-  return paths.map(path => FileEntry(path: path, name: path.relative_path(get_current_dir())))
-
+  return paths
+    .map(path => FileEntry(path: path, name: path.relative_path(get_current_dir())))
+    .filter(entry => not entry.name.is_hidden())
+    
 proc load_file(editor: Editor, path: string)
 proc process_key(quick_open: QuickOpen, editor: Editor, key: Key) =
   case key.kind:
