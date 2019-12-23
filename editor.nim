@@ -26,16 +26,6 @@ import utils, ui_utils, termdiff, highlight, buffer, window_manager
 # Types
 type  
   # Editor
-  CursorKind = enum CursorInsert, CursorSelection
-  
-  Cursor = object
-    case kind: CursorKind:
-      of CursorInsert:
-        pos: int
-      of CursorSelection:
-        start: int
-        stop: int
-
   PromptField = object
     title: string
     entry: Entry
@@ -199,29 +189,15 @@ proc show_prompt(editor: Editor,
     kind: PromptActive,
     title: title,
     selected_field: 0,
-    fields: fields.map(title => PromptField(title: title, entry: Entry(
-      text: "",
-      cursor: 0,
-      copy_buffer: editor.app.copy_buffer
-    ))),
+    fields: fields.map(title => PromptField(
+      title: title,
+      entry: make_entry(editor.app.copy_buffer)
+    )),
     callback: callback
   )
 
 proc hide_prompt(editor: Editor) = 
   editor.prompt = Prompt(kind: PromptNone)
-
-proc is_under(cursor: Cursor, pos: int): bool =
-  case cursor.kind:
-    of CursorInsert:
-      return pos == cursor.pos
-    of CursorSelection:
-      return (pos >= cursor.start and pos < cursor.stop) or
-             (pos >= cursor.stop and pos < cursor.start)
-
-proc get_pos(cursor: Cursor): int =
-  case cursor.kind:
-    of CursorInsert: return cursor.pos
-    of CursorSelection: return cursor.stop
 
 proc update_cursor(editor: Editor, index: int, pos_raw: int, shift: bool) =
   let pos = max(min(pos_raw, editor.buffer.text.len), 0)
@@ -239,31 +215,7 @@ proc update_cursor(editor: Editor, index: int, pos_raw: int, shift: bool) =
       if shift:
         editor.cursors[index].stop = pos
       else:
-        editor.cursors[index] = Cursor(kind: CursorInsert, pos: pos)
-  
-proc sort(cursor: Cursor): Cursor =
-  case cursor.kind:
-    of CursorInsert: return cursor
-    of CursorSelection:
-      if cursor.start < cursor.stop:
-        return cursor
-      else:
-        return Cursor(kind: CursorSelection, start: cursor.stop, stop: cursor.start)
-
-proc move(cursor: var Cursor, delta: int, max: int) =
-  case cursor.kind:
-    of CursorInsert:
-      cursor.pos += delta
-      if cursor.pos > max:
-        cursor.pos = max
-    of CursorSelection:
-      cursor.start += delta
-      cursor.stop += delta
-      
-      if cursor.start > max:
-        cursor.start = max
-      if cursor.stop > max:
-        cursor.stop = max
+        editor.cursors[index] = Cursor(kind: CursorInsert, pos: pos)  
   
 proc is_under_cursor(editor: Editor, pos: int): bool =
   for cursor in editor.cursors:
