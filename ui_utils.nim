@@ -116,12 +116,30 @@ proc update(cursor: var Cursor, dir, max_pos: int, select: bool) =
         else:
           cursor = Cursor(kind: CursorInsert, pos: cur.stop)
 
+proc skip(text: string, pos, dir: int): int =
+  result = 0
+  if pos < 0:
+    result = -pos
+  elif pos >= text.len:
+    result = -(pos - text.len + 1)
+  let v = text[pos + result].is_alpha_numeric()
+  while pos + result >= 0 and
+        pos + result < text.len and
+        text[pos + result].is_alpha_numeric() == v:
+    result += dir
+
 proc process_key*(entry: var Entry, key: Key) =
   case key.kind:
     of KeyArrowLeft:
-      entry.cursor.update(-1, entry.text.len, key.shift)
+      var offset = -1
+      if key.ctrl:
+        offset = entry.text.skip(entry.cursor.get_pos() - 1, -1)
+      entry.cursor.update(offset, entry.text.len, key.shift)
     of KeyArrowRight:
-      entry.cursor.update(1, entry.text.len, key.shift)
+      var offset = 1
+      if key.ctrl:
+        offset = entry.text.skip(entry.cursor.get_pos(), 1)
+      entry.cursor.update(offset, entry.text.len, key.shift)
     of KeyBackspace:
       case entry.cursor.kind:
         of CursorInsert:
