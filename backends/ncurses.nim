@@ -20,19 +20,23 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import common, tables, hashes
+import common, tables, hashes, unicode
 
-{.passL: gorge("pkg-config --libs ncurses").}
+{.passL: gorge("pkg-config --libs ncursesw").}
 
 # Wrapper
 type
   WindowObj {.header: "<ncurses.h>", importc:"WINDOW".} = object
   Window = ptr WindowObj
 
+proc setlocale(category: cint, locale: cstring) {.header: "<locale.h>", importc.}
+
 proc initscr(): Window {.header: "<ncurses.h>", importc.}
 proc endwin(): cint {.header: "<ncurses.h>", importc.}
 proc move(y, x: cint): cint {.header: "<ncurses.h>", importc.}
 proc addch(chr: char): cint {.header: "<ncurses.h>", importc.}
+proc add_wch(chr: cstring): cint {.header: "<ncurses.h>", importc.}
+proc addwstr(chr: cstring): cint {.header: "<ncurses.h>", importc.}
 proc addstr(str: cstring): cint {.header: "<ncurses.h>", importc.}
 proc getch(): cint {.header: "<ncurses.h>", importc.}
 proc clear(): cint {.header: "<ncurses.h>", importc.}
@@ -60,11 +64,13 @@ var
   A_REVERSE {.header: "<ncurses.h>", importc.}: cint
   A_BOLD {.header: "<ncurses.h>", importc.}: cint
   A_DIM {.header: "<ncurses.h>", importc.}: cint
+  LC_ALL {.header: "<locale.h>", importc.}: cint
 
 var stdscr {.header: "<ncurses.h>", importc.}: Window
 
 # Backend Interface
 proc setup_term*() =
+  setlocale(LC_ALL, "")
   discard initscr()
   discard disable_echo()
   discard start_color()
@@ -75,6 +81,7 @@ proc setup_term*() =
   raw()
   curs_set(0)
   
+  
 proc reset_term*() =
   discard enable_echo()
   discard endwin()
@@ -83,7 +90,7 @@ proc read_key*(): Key =
   let key_code = getch().int()
   
   case key_code:
-    of 263: return Key(kind: KeyBackspace)
+    of 263, 127: return Key(kind: KeyBackspace)
     of 13: return Key(kind: KeyReturn)
     of 259: return Key(kind: KeyArrowUp)
     of 258: return Key(kind: KeyArrowDown)
@@ -106,18 +113,24 @@ proc read_key*(): Key =
     of 393: return Key(kind: KeyArrowLeft, shift: true)
     of 402: return Key(kind: KeyArrowRight, shift: true)
     of 330: return Key(kind: KeyDelete)
-    of 353: return Key(kind: KeyChar, chr: 'I', ctrl: true, shift: true) 
+    of 353: return Key(kind: KeyChar, chr: Rune('I'), ctrl: true, shift: true) 
     else: discard
   
   if key_code <= 26:
     return Key(
       kind: KeyChar,
-      chr: char(key_code - 1 + ord('a')),
+      chr: Rune(char(key_code - 1 + ord('a'))),
       ctrl: true
     )
     
   if key_code <= 255:
-    return Key(kind: KeyChar, chr: chr(key_code))
+    var str = $chr(key_code)
+    let len = str.rune_len_at(0)
+    
+    for it in 1..<len:
+      str &= char(getch().int())
+    
+    return Key(kind: KeyChar, chr: str.rune_at(0))
 
   return Key(kind: KeyUnknown, key_code: key_code)
   
@@ -163,6 +176,10 @@ proc set_cursor_pos*(x, y: int) =
 
 proc term_write*(chr: char) =
   discard addch(chr)
+
+proc term_write*(rune: Rune) =
+  var str = cstring($rune)
+  discard addstr(str)
 
 proc term_refresh*() =
   discard refresh()

@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import utils, sequtils, strutils, backends/ncurses, backends/common
+import utils, sequtils, strutils, backends/ncurses, backends/common, unicode
 
 export setup_term, reset_term, read_key
 
@@ -34,7 +34,7 @@ type
 
 proc make_term_screen*(w, h: int): owned TermScreen =
   let chr = CharCell(
-    chr: ' ',
+    chr: Rune(' '),
     fg: Color(base: ColorDefault),
     bg: Color(base: ColorDefault)
   )
@@ -105,7 +105,7 @@ proc move_to*(ren: var TermRenderer, pos: Index2d) = ren.pos = pos
 proc move_to*(ren: var TermRenderer, x, y: int) = ren.move_to(Index2d(x: x, y: y))
 
 proc put*(ren: var TermRenderer,
-          chr: char,
+          rune: Rune,
           fg: Color = Color(base: ColorDefault),
           bg: Color = Color(base: ColorDefault),
           reverse: bool = false) =
@@ -115,10 +115,17 @@ proc put*(ren: var TermRenderer,
   ren.pos.x += 1
   if index >= ren.screen.data.len:
     return
-  ren.screen.data[index].chr = chr
+  ren.screen.data[index].chr = rune
   ren.screen.data[index].fg = fg
   ren.screen.data[index].bg = bg
   ren.screen.data[index].reverse = reverse
+
+proc put*(ren: var TermRenderer,
+          chr: char,
+          fg: Color = Color(base: ColorDefault),
+          bg: Color = Color(base: ColorDefault),
+          reverse: bool = false) =
+  ren.put(Rune(chr), fg=fg, bg=bg, reverse=reverse)
 
 proc put*(ren: var TermRenderer, chr: char, pos: Index2d) =
   ren.pos = pos
@@ -127,21 +134,28 @@ proc put*(ren: var TermRenderer, chr: char, pos: Index2d) =
 proc put*(ren: var TermRenderer, chr: char, x, y: int) = ren.put(chr, Index2d(x: x, y: y))
 
 proc put*(ren: var TermRenderer,
-          str: string,
+          str: seq[Rune],
           fg: Color = Color(base: ColorDefault),
           bg: Color = Color(base: ColorDefault),
           reverse: bool = false) =
-  for it, chr in str.pairs:
+  for it, rune in str.pairs:
     if not ren.clip_area.is_inside(ren.pos + Index2d(x: it, y: 0)):
       return
     let index = ren.pos.x + ren.pos.y * ren.screen.width + it
     if index >= ren.screen.data.len:
       break
-    ren.screen.data[index].chr = chr
+    ren.screen.data[index].chr = rune
     ren.screen.data[index].fg = fg
     ren.screen.data[index].bg = bg
     ren.screen.data[index].reverse = reverse
   ren.pos.x += str.len
+
+proc put*(ren: var TermRenderer,
+          str: string,
+          fg: Color = Color(base: ColorDefault),
+          bg: Color = Color(base: ColorDefault),
+          reverse: bool = false) =
+  ren.put(str.to_runes(), fg=fg, bg=bg, reverse=reverse)
 
 proc clip*(ren: var TermRenderer, area: Box) =
   ren.clip_area = area

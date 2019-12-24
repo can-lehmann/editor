@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import strutils, sequtils, sugar, tables
+import strutils, sequtils, sugar, tables, unicode
 import window_manager, termdiff, utils, ui_utils
 
 const
@@ -213,7 +213,7 @@ method process_key*(calc: Calc, key: Key) =
         calc.selected = 0
     else:
       calc.inputs[calc.selected].entry.process_key(key)
-      let node = calc.inputs[calc.selected].entry.text.parse()
+      let node = ($calc.inputs[calc.selected].entry.text).parse()
       if node != nil:
         calc.inputs[calc.selected].output = node.eval()
       else:
@@ -223,12 +223,12 @@ proc max_input_number_width(calc: Calc): int =
   ($calc.inputs.len).len + 2
 
 proc input_number(calc: Calc, n: int): string =
-  return "[" & align($n, ($calc.inputs.len).len) & "]"
+  return "[" & strutils.align($n, ($calc.inputs.len).len) & "]"
 
 method render*(calc: Calc, box: Box, ren: var TermRenderer) =
   let
     title = repeat(' ', calc.max_input_number_width() + 1) &
-            align_left("Calculator", box.size.x - calc.max_input_number_width() - 1)
+            unicode.align_left("Calculator", box.size.x - calc.max_input_number_width() - 1)
   ren.move_to(box.min)
   ren.put(title, fg=Color(base: ColorBlack), bg=Color(base: ColorWhite, bright: true))
   

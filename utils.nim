@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import unicode, sequtils, strutils
+
 type  
   Index2d* = object
     x*: int
@@ -45,3 +47,39 @@ proc to_index2d*(dir: Direction): Index2d =
     of DirDown: return Index2d(x: 0, y: 1)
     of DirLeft: return Index2d(x: -1, y: 0)
     of DirRight: return Index2d(x: 1, y: 0)
+
+proc is_ascii*(rune: Rune): bool = rune.int32 < 127
+proc to_char*(rune: Rune): char = rune.int32.char
+
+proc is_alpha_numeric*(rune: Rune): bool =
+  is_alpha(rune) or (is_ascii(rune) and to_char(rune).is_digit())
+
+proc substr*(text: seq[Rune], first: int): seq[Rune] =
+  result = new_seq[Rune](text.len - first)
+  for it in first..<text.len:
+    result[it - first] = text[it]
+
+proc substr*(text: seq[Rune], first, last: int): seq[Rune] =
+  result = new_seq[Rune](last - first + 1)
+  
+  var it2 = 0
+  for it in first..last:
+    result[it2] = text[it]
+    it2 += 1
+
+proc pattern_at*(text, pattern: seq[Rune], pos: int): bool =
+  if pos + pattern.len > text.len:
+    return false
+  
+  for it in 0..<pattern.len:
+    if text[it + pos] != pattern[it]:
+      return false
+  return true
+
+proc find*(text: seq[Rune], pattern: seq[Rune], start: int = 0): int =
+  for it in start..<(text.len - pattern.len):
+    if text.pattern_at(pattern, it):
+      return it
+  return -1
+
+converter to_rune*(chr: char): Rune = Rune(chr)

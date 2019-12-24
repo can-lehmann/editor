@@ -21,20 +21,20 @@
 # SOFTWARE.
 
 
-import strutils, deques
+import strutils, deques, unicode
 import utils, termdiff
 
 type
   CopyBuffer* = ref object
-    history*: Deque[string]
+    history*: Deque[seq[Rune]]
     
 proc make_copy_buffer*(): owned CopyBuffer =
-  return CopyBuffer(history: init_deque[string]())
+  return CopyBuffer(history: init_deque[seq[Rune]]())
 
-proc copy*(buffer: CopyBuffer, str: string) =
+proc copy*(buffer: CopyBuffer, str: seq[Rune]) =
   buffer.history.add_last(str)
 
-proc paste*(buffer: CopyBuffer): string =
+proc paste*(buffer: CopyBuffer): seq[Rune] =
   return buffer.history[buffer.history.len - 1]
 
 type
@@ -84,7 +84,7 @@ proc is_under*(cursor: Cursor, pos: int): bool =
 
 type
   Entry* = object
-    text*: string
+    text*: seq[Rune]
     cursor*: Cursor
     copy_buffer*: CopyBuffer
 
@@ -116,7 +116,7 @@ proc update(cursor: var Cursor, dir, max_pos: int, select: bool) =
         else:
           cursor = Cursor(kind: CursorInsert, pos: cur.stop)
 
-proc skip(text: string, pos, dir: int): int =
+proc skip(text: seq[Rune], pos, dir: int): int =
   result = 0
   if pos < 0:
     result = -pos
@@ -158,9 +158,9 @@ proc process_key*(entry: var Entry, key: Key) =
     of KeyChar:
       if key.ctrl:
         case key.chr:
-          of 'a':
+          of Rune('a'):
             entry.cursor = Cursor(kind: CursorSelection, start: 0, stop: entry.text.len)
-          of 'v':
+          of Rune('v'):
             entry.delete_selected()
             if entry.copy_buffer == nil:
               return
@@ -170,11 +170,11 @@ proc process_key*(entry: var Entry, key: Key) =
               paste = entry.copy_buffer.paste()
             entry.text = before & paste & after
             entry.cursor.pos += paste.len
-          of 'c', 'x':
+          of Rune('c'), Rune('x'):
             if entry.cursor.kind == CursorSelection:
               let cur = entry.cursor.sort()
               entry.copy_buffer.copy(entry.text.substr(cur.start, cur.stop - 1))
-              if key.chr == 'x':
+              if key.chr == Rune('x'):
                 entry.delete_selected()
           else: discard
       else:
@@ -182,7 +182,7 @@ proc process_key*(entry: var Entry, key: Key) =
         let
           before = entry.text.substr(0, entry.cursor.pos - 1)
           after = entry.text.substr(entry.cursor.pos)
-        entry.text = before & key.chr & after
+        entry.text = before & Rune(int32(key.chr)) & after
         entry.cursor.pos += 1 
     else:
       discard
@@ -203,4 +203,4 @@ proc render*(entry: Entry, ren: var TermRenderer) =
       ren.put(entry.text.substr(cur.stop))
       
 proc make_entry*(copy_buffer: CopyBuffer = nil): owned Entry =
-  return Entry(text: "", cursor: Cursor(kind: CursorInsert, pos: 0), copy_buffer: copy_buffer)
+  return Entry(text: @[], cursor: Cursor(kind: CursorInsert, pos: 0), copy_buffer: copy_buffer)

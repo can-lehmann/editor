@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import utils, ui_utils, highlight, termdiff, buffer, strutils, tables
+import utils, ui_utils, highlight, termdiff, buffer, strutils, tables, unicode
 
 type
   Window* = ref object of RootObj
@@ -79,7 +79,7 @@ method process_key(launcher: Launcher, key: Key) =
     else: discard
 
 method render(launcher: Launcher, box: Box, ren: var TermRenderer) =
-  let title = "  " & align_left("Launcher", box.size.x - 2)
+  let title = "  " & strutils.align_left("Launcher", box.size.x - 2)
   ren.move_to(box.min)
   ren.put(title, fg=Color(base: ColorBlack), bg=Color(base: ColorWhite, bright: true))
   
@@ -286,10 +286,10 @@ proc process_key*(app: App, key: Key): bool =
     of AppModePane:
       case key.kind:
         of KeyChar:
-          if key.chr == 'n':
+          if key.chr == Rune('n'):
             app.mode = AppModeNewPane
             return
-          elif key.chr == 'a':
+          elif key.chr == Rune('a'):
             app.open_launcher()
         of KeyArrowUp: discard app.root_pane.select_above()
         of KeyArrowDown: discard app.root_pane.select_below()
@@ -303,11 +303,11 @@ proc process_key*(app: App, key: Key): bool =
         of KeyChar:
           if key.ctrl:
             case key.chr:
-              of 'q': return true
-              of 'w':
+              of Rune('q'): return true
+              of Rune('w'):
                 app.root_pane.close_active_pane()
                 return
-              of 'p':
+              of Rune('p'):
                 app.mode = AppModePane
                 return
               else:  discard

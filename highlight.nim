@@ -59,7 +59,7 @@ const
     "float", "float64", "float32",
     "array", "string", "seq", "set", "tuple",
     "bool", "char", "auto",
-    "cint", "cshort",
+    "cint", "cshort", "cstring",
     "openArray", "Table", "Deque", "HashSet"
   ]
 

@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import unicode
+
 type 
   BaseColor* = enum
     ColorBlack = 0, ColorRed, ColorGreen, ColorYellow, ColorBlue, ColorMagenta, ColorCyan, ColorWhite, ColorDefault
@@ -29,7 +31,7 @@ type
     bright*: bool
   
   CharCell* = object
-    chr*: char
+    chr*: Rune
     fg*: Color
     bg*: Color
     reverse*: bool
@@ -44,7 +46,7 @@ type
     ctrl*: bool
     alt*: bool
     case kind*: KeyKind:
-      of KeyChar: chr*: char
+      of KeyChar: chr*: Rune
       of KeyUnknown: key_code*: int
       else: discard
 

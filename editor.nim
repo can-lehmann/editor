@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import sequtils, strutils, os, sugar, streams, deques
+import sequtils, strutils, os, sugar, streams, deques, unicode
 import utils, ui_utils, termdiff, highlight, buffer, window_manager
 
 # Types
@@ -32,7 +32,7 @@ type
   
   PromptKind = enum PromptNone, PromptActive, PromptInactive, PromptInfo
     
-  PromptCallbackProc = proc (editor: Editor, inputs: seq[string])
+  PromptCallbackProc = proc (editor: Editor, inputs: seq[seq[Rune]])
   Prompt = object
     case kind: PromptKind:
       of PromptNone: discard
@@ -112,14 +112,14 @@ proc process_key(quick_open: QuickOpen, editor: Editor, key: Key) =
         quick_open.selected = 0
     else:
       quick_open.entry.process_key(key)
-      quick_open.shown_files = quick_open.files.filter(file => file.name.contains(quick_open.entry.text))
+      quick_open.shown_files = quick_open.files.filter(file => file.name.contains($quick_open.entry.text))
       quick_open.selected = quick_open.selected.min(quick_open.shown_files.len - 1).max(0)
 
 proc render(quick_open: QuickOpen, box: Box, ren: var TermRenderer) =
   ren.move_to(box.min.x, box.min.y)
   let
     label = "Search:"
-    title = " ".repeat(label.len + 1) & align_left("Quick Open", box.size.x - label.len - 1)
+    title = " ".repeat(label.len + 1) & strutils.align_left("Quick Open", box.size.x - label.len - 1)
   ren.put(title, fg=Color(base: ColorBlack), bg=Color(base: ColorWhite, bright: true))
   ren.move_to(box.min.x, box.min.y + 1)
   ren.put(label, fg=Color(base: ColorBlack), bg=Color(base: ColorWhite, bright: true))
@@ -175,7 +175,7 @@ proc process_key(prompt: var Prompt, key: Key) =
       prompt.fields[prompt.selected_field].entry.process_key(key)
 
 # Editor
-proc get_inputs(prompt: Prompt): seq[string] =
+proc get_inputs(prompt: Prompt): seq[seq[Rune]] =
   prompt.fields.map(field => field.entry.text)
 
 proc show_info(editor: Editor, lines: seq[string]) =
@@ -241,13 +241,13 @@ proc jump(editor: Editor, to: int) =
   editor.jump_stack.add(editor.cursors[0].get_pos())
   editor.cursors = @[Cursor(kind: CursorInsert, pos: to)]
 
-proc goto_line(editor: Editor, inputs: seq[string]) =
+proc goto_line(editor: Editor, inputs: seq[seq[Rune]]) =
   var line: int
   
   try:
-    line = inputs[0].parse_int() - 1
+    line = parse_int($inputs[0]) - 1
   except ValueError:
-    editor.show_info(@["Not a number: " & inputs[0]])
+    editor.show_info(@["Not a number: " & $inputs[0]])
     return
   
   if line == -1:
@@ -263,15 +263,15 @@ proc goto_line(editor: Editor, inputs: seq[string]) =
   editor.jump(editor.buffer.lines[line])
   editor.hide_prompt()
 
-proc find_pattern(editor: Editor, inputs: seq[string]) =
+proc find_pattern(editor: Editor, inputs: seq[seq[Rune]]) =
   var pos = editor.buffer.text.find(inputs[0], editor.cursors[0].get_pos + 1)
   if pos == -1:
     pos = editor.buffer.text.find(inputs[0])
   if pos != -1:
     editor.jump(pos)
 
-proc save_as(editor: Editor, inputs: seq[string]) =
-  editor.buffer.set_path(inputs[0], editor.app.languages)
+proc save_as(editor: Editor, inputs: seq[seq[Rune]]) =
+  editor.buffer.set_path($inputs[0], editor.app.languages)
   editor.buffer.save()
   editor.hide_prompt()
 
@@ -303,7 +303,7 @@ proc copy(editor: Editor) =
         text = editor.buffer.text.substr(cur.start, cur.stop - 1)
       editor.app.copy_buffer.copy(text)
 
-proc insert(editor: Editor, chr: char) =
+proc insert(editor: Editor, chr: Rune) =
   for it, cursor in editor.cursors:
     if cursor.kind == CursorSelection:
       continue
@@ -311,7 +311,7 @@ proc insert(editor: Editor, chr: char) =
     editor.buffer.insert(cursor.pos, chr)  
     editor.update_cursors(it, 1)
 
-proc insert(editor: Editor, str: string) =
+proc insert(editor: Editor, str: seq[Rune]) =
   for it, cursor in editor.cursors:
     if cursor.kind != CursorInsert:
       continue
@@ -330,7 +330,7 @@ proc new_buffer(editor: Editor) =
   editor.cursors = @[Cursor(kind: CursorInsert, pos: 0)]
   
 method process_key(editor: Editor, key: Key) = 
-  if key.kind == KeyChar and key.ctrl and key.chr == 'e':
+  if key.kind == KeyChar and key.ctrl and key.chr == Rune('e'):
     if editor.dialog.kind != DialogNone:
       editor.dialog = Dialog(kind: DialogNone)
     else:
@@ -384,7 +384,7 @@ method process_key(editor: Editor, key: Key) =
         let
           indent_level = editor.buffer.indentation(cursor.pos)
           indent = repeat(' ', indent_level)
-        editor.buffer.insert(cursor.pos, '\n' & indent)
+        editor.buffer.insert(cursor.pos, to_runes('\n' & indent))
         
         editor.update_cursors(it, 1 + indent_level)
     of KeyBackspace:
@@ -421,11 +421,11 @@ method process_key(editor: Editor, key: Key) =
     of KeyChar:
       if key.ctrl:
         case key.chr:
-          of 'i':
+          of Rune('i'):
             editor.delete_selections()
             for it in 0..<2:
               editor.insert(' ')
-          of 'I':
+          of Rune('I'):
             for it, cursor in editor.cursors:
               case cursor.kind:
                 of CursorInsert:
@@ -452,37 +452,38 @@ method process_key(editor: Editor, key: Key) =
                 of CursorSelection:
                   discard
                   #editor.unindent()
-          of 'a': editor.select_all()
-          of 't':
+          of Rune('a'): editor.select_all()
+          of Rune('t'):
             editor.dialog = Dialog(
               kind: DialogQuickOpen,
               quick_open: make_quick_open(editor.app)
             )
-          of 's':
+          of Rune('s'):
             if editor.buffer.file_path == "":
               editor.show_prompt("Save", @["File Name:"], callback=save_as)
             else:
               editor.buffer.save()
               editor.show_info(@["File saved."])
-          of 'n':
+          of Rune('n'):
             editor.new_buffer()
-          of 'r': editor.show_prompt("Find and replace", @["Pattern: ", "Replace: "], callback=find_pattern)
-          of 'f': editor.show_prompt("Find", @["Pattern: "], callback=find_pattern)
-          of 'g': editor.show_prompt("Go to Line", @["Line: "], callback=goto_line)
-          of 'v':
+          of Rune('r'):
+            editor.show_prompt("Find and replace", @["Pattern: ", "Replace: "], callback=find_pattern)
+          of Rune('f'): editor.show_prompt("Find", @["Pattern: "], callback=find_pattern)
+          of Rune('g'): editor.show_prompt("Go to Line", @["Line: "], callback=goto_line)
+          of Rune('v'):
             editor.delete_selections()
             editor.insert(editor.app.copy_buffer.paste())
-          of 'c': editor.copy()
-          of 'x':
+          of Rune('c'): editor.copy()
+          of Rune('x'):
             editor.copy()
             editor.delete_selections()
-          of 'b':
+          of Rune('b'):
             if editor.jump_stack.len > 0:
               editor.cursors = @[Cursor(kind: CursorInsert, pos: editor.jump_stack.pop())]
           else: discard
       else:
         editor.delete_selections()
-        editor.insert(key.chr)
+        editor.insert(key.chr.char)
     else: discard
 
 proc compute_line_numbers_width(editor: Editor): int =
@@ -506,7 +507,7 @@ method render(editor: Editor, box: Box, ren: var TermRenderer) =
   ren.moveTo(box.min)
   let
     title = editor.buffer.display_file_name()
-    title_aligned = title.align_left(box.size.x - 1 - line_numbers_width)
+    title_aligned = strutils.align_left(title, box.size.x - 1 - line_numbers_width)
     title_output = repeat(' ', line_numbers_width + 1) & title_aligned
   ren.put(
     title_output,
@@ -592,14 +593,14 @@ method render(editor: Editor, box: Box, ren: var TermRenderer) =
       for it, line in editor.prompt.lines:
         ren.move_to(box.min.x, box.min.y + box.size.y - prompt_size + it)
         ren.put(
-          repeat(' ', line_numbers_width + 1) & alignLeft(line, box.size.x - line_numbers_width - 1),
+          strutils.repeat(' ', line_numbers_width + 1) & strutils.align_left(line, box.size.x - line_numbers_width - 1),
           fg=Color(base: ColorBlack, bright: false),
           bg=Color(base: ColorWhite, bright: true)
         )
     of PromptActive, PromptInactive:
       ren.move_to(box.min.x, box.min.y + box.size.y - prompt_size)
       ren.put(
-        repeat(' ', line_numbers_width + 1) & alignLeft(editor.prompt.title, box.size.x - line_numbers_width - 1),
+        repeat(' ', line_numbers_width + 1) & strutils.align_left(editor.prompt.title, box.size.x - line_numbers_width - 1),
         fg=Color(base: ColorBlack, bright: false),
         bg=Color(base: ColorWhite, bright: true)
       )

@@ -20,12 +20,12 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import utils, highlight, strutils
+import utils, highlight, strutils, unicode
 
 type
   Buffer* = ref object
     file_path*: string
-    text*: string
+    text*: seq[Rune]
     lines*: seq[int]
     changed*: bool
     tokens*: seq[Token]
@@ -39,7 +39,7 @@ proc update_tokens*(buffer: Buffer) =
   if buffer.language == nil:
     return
   
-  var iter = buffer.language.highlighter(buffer.text, 0)
+  var iter = buffer.language.highlighter($buffer.text, 0)
   for token in iter():
     buffer.tokens.add(token)
   
@@ -62,7 +62,7 @@ proc get_token*(buffer: Buffer, index: int): Token =
     initial = buffer.tokens[buffer.tokens.len - 1].stop
   
   var
-    iter = buffer.language.highlighter(buffer.text, initial)
+    iter = buffer.language.highlighter($buffer.text, initial)
     it = 0
 
   for token in iter():
@@ -73,7 +73,7 @@ proc get_token*(buffer: Buffer, index: int): Token =
   
   return Token(kind: TokenNone, start: -1, stop: -1)
 
-proc index_lines*(text: string): seq[int] =
+proc index_lines*(text: seq[Rune]): seq[int] =
   result.add(0)
   for it, chr in text.pairs:
     if chr == '\n':
@@ -133,7 +133,7 @@ proc display_file_name*(buffer: Buffer): string =
     result &= " (Text)"
 
 proc save*(buffer: Buffer) =
-  write_file(buffer.file_path, buffer.text)
+  write_file(buffer.file_path, $buffer.text)
   buffer.changed = false
 
 proc indentation*(buffer: Buffer, pos: int): int =
@@ -148,7 +148,7 @@ proc indentation*(buffer: Buffer, pos: int): int =
     result += 1
     it += 1
 
-proc insert*(buffer: Buffer, pos: int, chr: char) =
+proc insert*(buffer: Buffer, pos: int, chr: Rune) =
   let
     before = buffer.text.substr(0, pos - 1)
     after = buffer.text.substr(pos)
@@ -157,7 +157,7 @@ proc insert*(buffer: Buffer, pos: int, chr: char) =
   buffer.delete_tokens(pos)
   buffer.changed = true
 
-proc insert*(buffer: Buffer, pos: int, str: string) =
+proc insert*(buffer: Buffer, pos: int, str: seq[Rune]) =
   let
     before = buffer.text.substr(0, pos - 1)
     after = buffer.text.substr(pos)
@@ -187,7 +187,7 @@ proc skip*(buffer: Buffer, pos: int, dir: int): int =
 proc make_buffer*(): Buffer =
   return Buffer(
     file_path: "",
-    text: "",
+    text: @[],
     lines: @[0],
     changed: false,
     tokens: @[],
@@ -196,7 +196,7 @@ proc make_buffer*(): Buffer =
   )
   
 proc make_buffer*(path: string, lang: Language = nil): Buffer =
-  let text = path.read_file()
+  let text = to_runes(path.read_file())
   return Buffer(
     file_path: path,
     text: text,

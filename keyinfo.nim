@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import strutils, utils, window_manager, termdiff
+import strutils, unicode, utils, window_manager, termdiff
 
 type
   KeyInfo* = ref object of Window
@@ -31,7 +31,7 @@ method process_key*(key_info: KeyInfo, key: Key) =
   key_info.keys.add(key)
 
 method render*(key_info: KeyInfo, box: Box, ren: var TermRenderer) =
-  let title = "  " & align_left("Key Info", box.size.x - 2)
+  let title = "  " & strutils.align_left("Key Info", box.size.x - 2)
   ren.move_to(box.min)
   ren.put(title, fg=Color(base: ColorBlack), bg=Color(base: ColorWhite, bright: true))
   
@@ -44,7 +44,10 @@ method render*(key_info: KeyInfo, box: Box, ren: var TermRenderer) =
     if it >= key_info.keys.len or it < 0:
       break
     ren.move_to(box.min.x + 2, box.min.y + 1 + y)
-    ren.put($key_info.keys[it])
+    let key = key_info.keys[it]
+    if key.kind == KeyChar:
+      ren.put($int(key.chr))
+      ren.put(Rune(228))
     
 proc make_key_info*(app: App): Window =
   return KeyInfo(app: app, keys: @[])
