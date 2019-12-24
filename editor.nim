@@ -483,7 +483,7 @@ method process_key(editor: Editor, key: Key) =
           else: discard
       else:
         editor.delete_selections()
-        editor.insert(key.chr.char)
+        editor.insert(key.chr)
     else: discard
 
 proc compute_line_numbers_width(editor: Editor): int =

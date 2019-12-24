@@ -45,9 +45,9 @@ method render*(key_info: KeyInfo, box: Box, ren: var TermRenderer) =
       break
     ren.move_to(box.min.x + 2, box.min.y + 1 + y)
     let key = key_info.keys[it]
+    ren.put($key)
     if key.kind == KeyChar:
-      ren.put($int(key.chr))
-      ren.put(Rune(228))
+      ren.put(" (" & $int(key.chr) & ")")
     
 proc make_key_info*(app: App): Window =
   return KeyInfo(app: app, keys: @[])
