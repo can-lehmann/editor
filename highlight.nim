@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import sequtils, strutils, os, sugar, streams, deques
+import sequtils, strutils, os, sugar, streams, deques, unicode
 import utils, termdiff
 
 type
@@ -33,7 +33,7 @@ type
     
   Language* = ref object
     name*: string
-    highlighter*: proc (text: string, initial: int): (iterator (): Token {.closure.}) 
+    highlighter*: proc (text: seq[Rune], initial: int): (iterator (): Token {.closure.}) 
     file_exts*: seq[string]
     
 const
@@ -63,19 +63,19 @@ const
     "openArray", "Table", "Deque", "HashSet"
   ]
 
-proc is_int(str: string): bool =
+proc is_int(str: seq[Rune]): bool =
   for it, chr in str:
-    if not (chr.is_digit or
+    if not (char(chr).is_digit or
             chr == '_' or
             (chr == '+' and it == 0 and str.len > 1) or
             (chr == '-' and it == 0 and str.len > 1)):
       return false
   return true
 
-proc is_float(str: string): bool =
+proc is_float(str: seq[Rune]): bool =
   var point = false
   for it, chr in str:
-    if not (chr.is_digit or
+    if not (char(chr).is_digit or
             chr == '_' or
             (chr == '+' and it == 0 and str.len > 1) or
             (chr == '-' and it == 0 and str.len > 1)):
@@ -85,26 +85,26 @@ proc is_float(str: string): bool =
         return false
   return true
 
-proc token_kind(str: string): TokenKind =
-  if str == "true" or str == "false":
+proc token_kind(str: seq[Rune]): TokenKind =
+  if $str == "true" or $str == "false":
     return TokenLiteral
-  elif str in NIM_KEYWORDS:
+  elif $str in NIM_KEYWORDS:
     return TokenKeyword
-  elif str in NIM_TYPES:
+  elif $str in NIM_TYPES:
     return TokenType
   elif str.is_int or str.is_float:
     return TokenLiteral
   
   return TokenName
       
-proc tokenize_nim*(text: string, initial: int): (iterator (): Token {.closure.}) =
+proc tokenize_nim*(text: seq[Rune], initial: int): (iterator (): Token {.closure.}) =
   return iterator (): Token {.closure.} =
     type
       Mode = enum ModeNone, ModeString, ModeChar, ModeComment, ModeNestedComment 
     
     var
       start = 0
-      cur = ""
+      cur: seq[Rune] = @[]
       mode: Mode = ModeNone
       depth = 0 
       it = initial
@@ -140,9 +140,9 @@ proc tokenize_nim*(text: string, initial: int): (iterator (): Token {.closure.})
         of ModeNone:
           case chr:
             of ' ', '\t', '\n', '\r', '.', ':', '<', '>', '[', ']', '(', ')', '{', '}', ',', ';', '=', '`', '\"', '#', '\'':
-              if cur != "":
+              if cur.len > 0:
                 yield Token(kind: token_kind(cur), start: start, stop: it)
-                cur = ""
+                cur = @[]
               case chr:
                 of '\"':
                   mode = ModeString
@@ -161,7 +161,7 @@ proc tokenize_nim*(text: string, initial: int): (iterator (): Token {.closure.})
                 else:
                   discard
             else:
-              if cur == "":
+              if cur.len == 0:
                 start = it
               cur &= chr
       it += 1
@@ -175,7 +175,7 @@ proc tokenize_nim*(text: string, initial: int): (iterator (): Token {.closure.})
       of ModeString:
         yield Token(kind: TokenString, start: start, stop: it)
       else:          
-        if cur != "":
+        if cur.len > 0:
           yield Token(kind: token_kind(cur), start: start, stop: it)
 
 proc is_inside*(token: Token, index: int): bool =

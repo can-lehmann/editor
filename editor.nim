@@ -241,7 +241,7 @@ proc make_cursor_hook(editor: Editor): CursorHook =
             editor.cursors[it].start += delta
           if cursor.stop >= start:
             editor.cursors[it].stop += delta
-
+    
 proc update_scroll(editor: Editor, size: Index2d) =
   let pos = editor.buffer.to_2d(editor.primary_cursor().get_pos())
   
@@ -344,10 +344,11 @@ proc load_file(editor: Editor, path: string) =
   editor.cursors = @[Cursor(kind: CursorInsert, pos: 0)]
 
 proc new_buffer(editor: Editor) =
+  editor.buffer.unregister_hook(editor.cursor_hook_id)
   editor.buffer = make_buffer()
   editor.hide_prompt()
   editor.cursors = @[Cursor(kind: CursorInsert, pos: 0)]
-  
+
 method process_key(editor: Editor, key: Key) = 
   if key.kind == KeyChar and key.ctrl and key.chr == Rune('e'):
     if editor.dialog.kind != DialogNone:
@@ -370,35 +371,29 @@ method process_key(editor: Editor, key: Key) =
 
   case key.kind:
     of KeyArrowLeft:
-      if key.ctrl:
-        for it, cursor in editor.cursors:
-          editor.update_cursor(it, editor.buffer.skip(cursor.get_pos() - 1, -1) + 1, key.shift)
-      else:
-        for it, cursor in editor.cursors:
-          editor.update_cursor(it, cursor.get_pos() - 1, key.shift)
-      editor.merge_cursors()
+      for it, cursor in editor.cursors:
+        var delta = -1
+        if key.ctrl:
+          delta = (editor.buffer.skip(cursor.get_pos() - 1, -1) + 1) - cursor.get_pos()
+        update(editor.cursors[it], delta, editor.buffer.len, key.shift)
     of KeyArrowRight:
-      if key.ctrl:
-        for it, cursor in editor.cursors:
-          editor.update_cursor(it, editor.buffer.skip(cursor.get_pos(), 1), key.shift)
-      else:
-        for it, cursor in editor.cursors:
-          editor.update_cursor(it, cursor.get_pos() + 1, key.shift)
-      editor.merge_cursors()
+      for it, cursor in editor.cursors:
+        var delta = 1
+        if key.ctrl:
+          delta = (editor.buffer.skip(cursor.get_pos(), 1)) - cursor.get_pos()
+        update(editor.cursors[it], delta, editor.buffer.len, key.shift)
     of KeyArrowUp:
       for it, cursor in editor.cursors:
         var index = editor.buffer.to_2d(cursor.get_pos())
         index.y -= 1
         index.y = max(index.y, 0)
         editor.update_cursor(it, editor.buffer.to_index(index), key.shift)
-      editor.merge_cursors()
     of KeyArrowDown:
       for it, cursor in editor.cursors:
         var index = editor.buffer.to_2d(cursor.get_pos())
         index.y += 1
         index.y = min(index.y, editor.buffer.lines.len - 1)
         editor.update_cursor(it, editor.buffer.to_index(index), key.shift)
-      editor.merge_cursors()
     of KeyReturn:
       for it, cursor in editor.cursors:
         if cursor.kind == CursorSelection:
@@ -484,6 +479,7 @@ method process_key(editor: Editor, key: Key) =
       else:
         editor.insert(key.chr)
     else: discard
+  editor.merge_cursors()
 
 proc compute_line_numbers_width(editor: Editor): int =
   var max_line_number = editor.buffer.lines.len

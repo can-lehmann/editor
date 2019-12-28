@@ -69,7 +69,7 @@ proc update_tokens*(buffer: Buffer) =
   if buffer.language == nil:
     return
   
-  var iter = buffer.language.highlighter($buffer.text, 0)
+  var iter = buffer.language.highlighter(buffer.text, 0)
   for token in iter():
     buffer.tokens.add(token)
   
@@ -92,7 +92,7 @@ proc get_token*(buffer: Buffer, index: int): Token =
     initial = buffer.tokens[buffer.tokens.len - 1].stop
   
   var
-    iter = buffer.language.highlighter($buffer.text, initial)
+    iter = buffer.language.highlighter(buffer.text, initial)
     it = 0
 
   for token in iter():

@@ -123,7 +123,7 @@ proc delete_selected(entry: var Entry) =
   entry.text = before & after
   entry.cursor = Cursor(kind: CursorInsert, pos: cur.start)
 
-proc update(cursor: var Cursor, dir, max_pos: int, select: bool) =
+proc update*(cursor: var Cursor, dir, max_pos: int, select: bool) =
   case cursor.kind:
     of CursorInsert:
       let p = (cursor.pos + dir).max(0).min(max_pos)
