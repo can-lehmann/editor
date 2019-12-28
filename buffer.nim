@@ -23,6 +23,17 @@
 import utils, highlight, strutils, unicode
 
 type
+  ActionKind = enum ActionDelete, ActionInsert
+
+  Action = object
+    case kind: ActionKind:
+      of ActionDelete:
+        delete_pos: int
+        delete_text: seq[Rune]
+      of ActionInsert:
+        insert_pos: int
+        insert_text: seq[Rune]
+  
   CursorHook* = proc(start: int, delta: int) {.closure.}
 
   Buffer* = ref object
@@ -34,6 +45,8 @@ type
     tokens_done*: bool
     language*: Language
     cursor_hooks: seq[CursorHook]
+    undo_stack: seq[Action]
+    redo_stack: seq[Action]
 
 proc len*(buffer: Buffer): int = buffer.text.len
 proc `[]`*(buffer: Buffer, index: int): Rune = buffer.text[index]
@@ -168,7 +181,7 @@ proc indentation*(buffer: Buffer, pos: int): int =
 proc slice*(buffer: Buffer, start, stop: int): seq[Rune] =
   buffer.text.substr(start, stop - 1)
 
-proc delete*(buffer: Buffer, start, stop: int) =
+proc delete_no_undo(buffer: Buffer, start, stop: int) =
   buffer.text = buffer.text.substr(0, start - 1) & buffer.text.substr(stop)
   buffer.delete_tokens(start)
   buffer.reindex_lines()
@@ -176,7 +189,13 @@ proc delete*(buffer: Buffer, start, stop: int) =
   for it in countdown(stop - start, 1):
     buffer.call_hooks(start + it, -1)
 
-proc insert*(buffer: Buffer, pos: int, chr: Rune) =
+proc delete*(buffer: Buffer, start, stop: int) =
+  let text = buffer.slice(start, stop)
+  buffer.delete_no_undo(start, stop)
+  buffer.undo_stack.add(Action(kind: ActionDelete, delete_pos: start, delete_text: text))
+  buffer.redo_stack = @[]
+
+proc insert_no_undo(buffer: Buffer, pos: int, chr: Rune) =
   let
     before = buffer.text.substr(0, pos - 1)
     after = buffer.text.substr(pos)
@@ -186,7 +205,7 @@ proc insert*(buffer: Buffer, pos: int, chr: Rune) =
   buffer.changed = true
   buffer.call_hooks(pos, 1)
 
-proc insert*(buffer: Buffer, pos: int, str: seq[Rune]) =
+proc insert_no_undo(buffer: Buffer, pos: int, str: seq[Rune]) =
   let
     before = buffer.text.substr(0, pos - 1)
     after = buffer.text.substr(pos)
@@ -195,6 +214,16 @@ proc insert*(buffer: Buffer, pos: int, str: seq[Rune]) =
   buffer.delete_tokens(pos)
   buffer.changed = true
   buffer.call_hooks(pos, str.len)
+
+proc insert*(buffer: Buffer, pos: int, chr: Rune) =
+  buffer.insert_no_undo(pos, chr)
+  buffer.undo_stack.add(Action(kind: ActionInsert, insert_pos: pos, insert_text: @[chr]))
+  buffer.redo_stack = @[]
+  
+proc insert*(buffer: Buffer, pos: int, str: seq[Rune]) =
+  buffer.insert_no_undo(pos, str)
+  buffer.undo_stack.add(Action(kind: ActionInsert, insert_pos: pos, insert_text: str))
+  buffer.redo_stack = @[]
 
 proc insert_newline*(buffer: Buffer, pos: int) =
   let
@@ -206,6 +235,9 @@ proc insert_newline*(buffer: Buffer, pos: int) =
   buffer.changed = true
   buffer.call_hooks(pos, 1)
 
+  buffer.undo_stack.add(Action(kind: ActionInsert, insert_pos: pos, insert_text: @[Rune('\n')]))
+  buffer.redo_stack = @[]
+  
 proc skip*(buffer: Buffer, pos: int, dir: int): int =
   if buffer.text.len == 0:
     return 0
@@ -217,6 +249,28 @@ proc skip*(buffer: Buffer, pos: int, dir: int): int =
         result < buffer.text.len and
         buffer.text[result].is_alpha_numeric() == v:
     result += dir
+
+proc redo*(buffer: Buffer) =
+  if buffer.redo_stack.len == 0:
+    return
+  let action = buffer.redo_stack.pop()
+  buffer.undo_stack.add(action)
+  case action.kind:
+    of ActionInsert:
+      buffer.insert_no_undo(action.insert_pos, action.insert_text)
+    of ActionDelete:
+      buffer.delete_no_undo(action.delete_pos, action.delete_pos + action.delete_text.len)
+
+proc undo*(buffer: Buffer) =
+  if buffer.undo_stack.len == 0:
+    return
+  let action = buffer.undo_stack.pop()
+  buffer.redo_stack.add(action)
+  case action.kind:
+    of ActionDelete:
+      buffer.insert_no_undo(action.delete_pos, action.delete_text)
+    of ActionInsert:
+      buffer.delete_no_undo(action.insert_pos, action.insert_pos + action.insert_text.len)
 
 proc make_buffer*(): Buffer =
   return Buffer(

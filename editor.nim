@@ -475,9 +475,11 @@ method process_key(editor: Editor, key: Key) =
               if pos != -1 and pos != cur.start:
                 editor.cursors.add(Cursor(kind: CursorSelection, start: pos, stop: pos + text.len))
                 editor.merge_cursors()
-          of Rune('y'):
+          of Rune('o'):
             var cur = editor.primary_cursor()
             editor.cursors = @[cur]
+          of Rune('z'): editor.buffer.undo()
+          of Rune('y'): editor.buffer.redo()
           else: discard
       else:
         editor.insert(key.chr)
