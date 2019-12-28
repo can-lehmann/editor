@@ -72,6 +72,7 @@ type
     scroll: Index2d
     cursors: seq[Cursor]
     jump_stack: seq[int]
+    cursor_hook_id: int
  
 # Dialog / QuickOpen
 proc is_hidden(path: string): bool =
@@ -200,7 +201,7 @@ proc hide_prompt(editor: Editor) =
   editor.prompt = Prompt(kind: PromptNone)
 
 proc update_cursor(editor: Editor, index: int, pos_raw: int, shift: bool) =
-  let pos = max(min(pos_raw, editor.buffer.text.len), 0)
+  let pos = max(min(pos_raw, editor.buffer.len), 0)
   case editor.cursors[index].kind:
     of CursorInsert:
       if shift:
@@ -223,9 +224,18 @@ proc is_under_cursor(editor: Editor, pos: int): bool =
       return true
   return false
   
-proc update_cursors(editor: Editor, start: int, delta: int) =
-  for it in start..<editor.cursors.len:
-    editor.cursors[it].move(delta, editor.buffer.text.len)
+proc make_cursor_hook(editor: Editor): CursorHook =
+  return proc (start: int, delta: int) {.closure.} =
+    for it, cursor in editor.cursors:
+      case cursor.kind:
+        of CursorInsert:
+          if cursor.pos >= start:
+            editor.cursors[it].pos += delta
+        of CursorSelection:
+          if cursor.start >= start:
+            editor.cursors[it].start += delta
+          if cursor.stop >= start:
+            editor.cursors[it].stop += delta
 
 proc update_scroll(editor: Editor, size: Index2d) =
   let pos = editor.buffer.to_2d(editor.cursors[editor.cursors.len - 1].get_pos())
@@ -279,7 +289,7 @@ proc select_all(editor: Editor) =
   editor.cursors = @[Cursor(
     kind: CursorSelection,
     start: 0,
-    stop: editor.buffer.text.len
+    stop: editor.buffer.len
   )]
 
 proc delete_selections(editor: Editor) =
@@ -288,19 +298,15 @@ proc delete_selections(editor: Editor) =
       continue
     
     let cur = cursor.sort()
-    editor.buffer.text = editor.buffer.text.substr(0, cur.start - 1) & editor.buffer.text.substr(cur.stop)
+    editor.buffer.delete(cur.start, cur.stop)
     editor.cursors[it] = Cursor(kind: CursorInsert, pos: cur.start)
-    editor.buffer.delete_tokens(cur.start)
-    editor.update_cursors(it + 1, -(cur.stop - cur.start))
-  editor.buffer.reindex_lines()
-  editor.buffer.changed = true
   
 proc copy(editor: Editor) =
   for cursor in editor.cursors:
     if cursor.kind == CursorSelection:
       let
         cur = cursor.sort()
-        text = editor.buffer.text.substr(cur.start, cur.stop - 1)
+        text = editor.buffer.slice(cur.start, cur.stop)
       editor.app.copy_buffer.copy(text)
 
 proc insert(editor: Editor, chr: Rune) =
@@ -309,18 +315,18 @@ proc insert(editor: Editor, chr: Rune) =
       continue
     
     editor.buffer.insert(cursor.pos, chr)  
-    editor.update_cursors(it, 1)
-
+    
 proc insert(editor: Editor, str: seq[Rune]) =
   for it, cursor in editor.cursors:
     if cursor.kind != CursorInsert:
       continue
     
     editor.buffer.insert(cursor.pos, str)    
-    editor.update_cursors(it, str.len)
-  
+    
 proc load_file(editor: Editor, path: string) =
+  editor.buffer.unregister_hook(editor.cursor_hook_id)
   editor.buffer = editor.app.make_buffer(path)
+  editor.cursor_hook_id = editor.buffer.register_hook(editor.make_cursor_hook())
   editor.hide_prompt()
   editor.cursors = @[Cursor(kind: CursorInsert, pos: 0)]
 
@@ -384,40 +390,26 @@ method process_key(editor: Editor, key: Key) =
         let
           indent_level = editor.buffer.indentation(cursor.pos)
           indent = repeat(' ', indent_level)
-        editor.buffer.insert(cursor.pos, to_runes('\n' & indent))
-        
-        editor.update_cursors(it, 1 + indent_level)
+        editor.buffer.insert(cursor.pos, to_runes('\n' & indent))    
     of KeyBackspace:
       for it, cursor in editor.cursors:
         case cursor.kind
           of CursorSelection:
             let cur = cursor.sort()
-            editor.buffer.text = editor.buffer.text.substr(0, cur.start - 1) & editor.buffer.text.substr(cur.stop)
-            editor.update_cursors(it + 1, -(cur.stop - cur.start))
+            editor.buffer.delete(cur.start, cur.stop)
             editor.cursors[it] = Cursor(kind: CursorInsert, pos: cur.start)
-            editor.buffer.delete_tokens(cur.start)
           of CursorInsert:
             if cursor.pos > 0:
-              editor.buffer.text = editor.buffer.text.substr(0, cursor.pos - 2) & editor.buffer.text.substr(cursor.pos)
-              editor.update_cursors(it, -1)
-              editor.buffer.delete_tokens(cursor.pos - 1)
-        editor.buffer.reindex_lines()
-      editor.buffer.changed = true
+              editor.buffer.delete(cursor.pos - 1, cursor.pos)
     of KeyDelete:
       for it, cursor in editor.cursors:
         case cursor.kind:
           of CursorSelection:
             let cur = cursor.sort()
-            editor.buffer.text = editor.buffer.text.substr(0, cur.start - 1) & editor.buffer.text.substr(cur.stop)
-            editor.update_cursors(it + 1, -(cur.stop - cur.start))
+            editor.buffer.delete(cur.start, cur.stop)
             editor.cursors[it] = Cursor(kind: CursorInsert, pos: cur.start)
-            editor.buffer.delete_tokens(cur.start)
           of CursorInsert:
-            editor.buffer.text = editor.buffer.text.substr(0, cursor.pos - 1) & editor.buffer.text.substr(cursor.pos + 1)
-            editor.update_cursors(it + 1, -1)
-            editor.buffer.delete_tokens(cursor.pos)
-      editor.buffer.reindex_lines()
-      editor.buffer.changed = true
+            editor.buffer.delete(cursor.pos, cursor.pos + 1)
     of KeyChar:
       if key.ctrl:
         case key.chr:
@@ -426,32 +418,7 @@ method process_key(editor: Editor, key: Key) =
             for it in 0..<2:
               editor.insert(' ')
           of Rune('I'):
-            for it, cursor in editor.cursors:
-              case cursor.kind:
-                of CursorInsert:
-                  let
-                    line_index = editor.buffer.lines[editor.buffer.to_2d(cursor.pos).y]
-                    indent_width = 2
-                  var is_indented = true
-                  for it in 0..<indent_width:
-                    if it + line_index >= editor.buffer.text.len or
-                       editor.buffer.text[it + line_index] != ' ':
-                      is_indented = false
-                      break
-                  
-                  if is_indented:
-                    let
-                      before = editor.buffer.text.substr(0, line_index - 1)
-                      after = editor.buffer.text.substr(line_index + indent_width)
-                    editor.buffer.text = before & after
-                  
-                  editor.buffer.reindex_lines()
-                  editor.update_cursors(it, -indent_width)
-                  editor.buffer.delete_tokens(cursor.pos)
-                  editor.buffer.changed = true
-                of CursorSelection:
-                  discard
-                  #editor.unindent()
+            discard
           of Rune('a'): editor.select_all()
           of Rune('t'):
             editor.dialog = Dialog(
@@ -550,18 +517,18 @@ method render(editor: Editor, box: Box, ren: var TermRenderer) =
           editor.buffer.get_token(current_token).stop < index:
       current_token += 1
     
-    while index < editor.buffer.text.len and editor.buffer.text[index] != '\n':
+    while index < editor.buffer.len and editor.buffer[index] != '\n':
       if index - editor.buffer.lines[it] + line_numbers_width + 1 >= box.size.x:
         reached_end = true
         break
     
       if editor.is_under_cursor(index):
-        ren.put(editor.buffer.text[index], reverse=true)
+        ren.put(editor.buffer[index], reverse=true)
         index += 1
         continue
     
       var
-        chr = editor.buffer.text[index]
+        chr = editor.buffer[index]
         fg = Color(base: ColorDefault, bright: false)
         
       if editor.buffer.get_token(current_token).kind != TokenNone:
@@ -615,7 +582,10 @@ method render(editor: Editor, box: Box, ren: var TermRenderer) =
     else:
       discard
   
-    
+
+method close*(editor: Editor) =
+  editor.buffer.unregister_hook(editor.cursor_hook_id)  
+  
 proc make_editor*(app: App, buffer: Buffer): Editor =
   result = Editor(
     buffer: buffer,
@@ -623,6 +593,7 @@ proc make_editor*(app: App, buffer: Buffer): Editor =
     cursors: @[Cursor(kind: CursorInsert, pos: 0)],
     app: app
   )
+  result.cursor_hook_id = result.buffer.register_hook(result.make_cursor_hook())
 
 proc make_editor*(app: App): Window =
   make_editor(app, make_buffer())

@@ -117,6 +117,8 @@ proc update(cursor: var Cursor, dir, max_pos: int, select: bool) =
           cursor = Cursor(kind: CursorInsert, pos: cur.stop)
 
 proc skip(text: seq[Rune], pos, dir: int): int =
+  if text.len == 0:
+    return 0
   result = 0
   if pos < 0:
     result = -pos

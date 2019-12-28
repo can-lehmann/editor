@@ -58,7 +58,7 @@ const
     "byte", "uint8", "uint16", "uint32", "uint64",
     "float", "float64", "float32",
     "array", "string", "seq", "set", "tuple",
-    "bool", "char", "auto",
+    "bool", "char", "auto", "pointer",
     "cint", "cshort", "cstring",
     "openArray", "Table", "Deque", "HashSet"
   ]

@@ -56,6 +56,7 @@ type
 
 method process_key*(window: Window, key: Key) {.base.} = quit "Not implemented"
 method render*(window: Window, box: Box, ren: var TermRenderer) {.base.} = quit "Not implemented"
+method close*(window: Window) = discard
 
 # Launcher
 proc make_launcher(app: App): Window =
@@ -167,20 +168,19 @@ proc select_right*(pane: Pane): bool =
           pane.selected = true
         return true
 
-proc is_closable(pane: Pane): bool =
-  return pane.kind == PaneWindow
-
 proc close_active_pane*(pane: Pane) = 
   if pane.kind != PaneSplitH and pane.kind != PaneSplitV:
     return
   
   if pane.selected:
-    if pane.pane_b.is_closable():
+    if pane.pane_b.kind == PaneWindow:
+      pane.pane_b.window.close()
       pane[] = pane.pane_a[]
     else:
       pane.pane_b.close_active_pane()
   else:
-    if pane.pane_a.is_closable():
+    if pane.pane_a.kind == PaneWindow:
+      pane.pane_a.window.close()
       pane[] = pane.pane_b[]
     else:
       pane.pane_a.close_active_pane()

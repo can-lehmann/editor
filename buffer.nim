@@ -23,6 +23,8 @@
 import utils, highlight, strutils, unicode
 
 type
+  CursorHook* = proc(start: int, delta: int) {.closure.}
+
   Buffer* = ref object
     file_path*: string
     text*: seq[Rune]
@@ -31,6 +33,21 @@ type
     tokens*: seq[Token]
     tokens_done*: bool
     language*: Language
+    cursor_hooks: seq[CursorHook]
+
+proc len*(buffer: Buffer): int = buffer.text.len
+proc `[]`*(buffer: Buffer, index: int): Rune = buffer.text[index]
+
+proc register_hook*(buffer: Buffer, hook: CursorHook): int =
+  result = buffer.cursor_hooks.len
+  buffer.cursor_hooks.add(hook)
+
+proc unregister_hook*(buffer: Buffer, id: int) =
+  buffer.cursor_hooks.del(id)
+
+proc call_hooks(buffer: Buffer, start, delta: int) =
+  for hook in buffer.cursor_hooks:
+    hook(start, delta)
 
 proc update_tokens*(buffer: Buffer) =
   buffer.tokens = @[]
@@ -148,6 +165,17 @@ proc indentation*(buffer: Buffer, pos: int): int =
     result += 1
     it += 1
 
+proc slice*(buffer: Buffer, start, stop: int): seq[Rune] =
+  buffer.text.substr(start, stop - 1)
+
+proc delete*(buffer: Buffer, start, stop: int) =
+  buffer.text = buffer.text.substr(0, start - 1) & buffer.text.substr(stop)
+  buffer.delete_tokens(start)
+  buffer.reindex_lines()
+  buffer.changed = true
+  for it in countdown(stop - start, 1):
+    buffer.call_hooks(start + it, -1)
+
 proc insert*(buffer: Buffer, pos: int, chr: Rune) =
   let
     before = buffer.text.substr(0, pos - 1)
@@ -156,6 +184,7 @@ proc insert*(buffer: Buffer, pos: int, chr: Rune) =
   buffer.update_line_indices(pos + 1, 1)
   buffer.delete_tokens(pos)
   buffer.changed = true
+  buffer.call_hooks(pos, 1)
 
 proc insert*(buffer: Buffer, pos: int, str: seq[Rune]) =
   let
@@ -165,6 +194,7 @@ proc insert*(buffer: Buffer, pos: int, str: seq[Rune]) =
   buffer.reindex_lines()
   buffer.delete_tokens(pos)
   buffer.changed = true
+  buffer.call_hooks(pos, str.len)
 
 proc insert_newline*(buffer: Buffer, pos: int) =
   let
@@ -174,8 +204,12 @@ proc insert_newline*(buffer: Buffer, pos: int) =
   buffer.reindex_lines()
   buffer.delete_tokens(pos)
   buffer.changed = true
+  buffer.call_hooks(pos, 1)
 
 proc skip*(buffer: Buffer, pos: int, dir: int): int =
+  if buffer.text.len == 0:
+    return 0
+
   result = pos.max(0).min(buffer.text.len - 1)
   
   let v = buffer.text[result].is_alpha_numeric()
@@ -193,6 +227,7 @@ proc make_buffer*(): Buffer =
     tokens: @[],
     tokens_done: false,
     language: nil,
+    cursor_hooks: @[]
   )
   
 proc make_buffer*(path: string, lang: Language = nil): Buffer =
@@ -205,6 +240,7 @@ proc make_buffer*(path: string, lang: Language = nil): Buffer =
     tokens: @[],
     tokens_done: false,
     language: lang,
+    cursor_hooks: @[]
   )
 
 proc make_buffer*(path: string, langs: seq[Language]): Buffer =
