@@ -21,7 +21,7 @@
 # SOFTWARE.
 
 
-import strutils, deques, unicode
+import strutils, deques, unicode, hashes, sets
 import utils, termdiff
 
 type
@@ -81,6 +81,31 @@ proc is_under*(cursor: Cursor, pos: int): bool =
     of CursorSelection:
       return (pos >= cursor.start and pos < cursor.stop) or
              (pos >= cursor.stop and pos < cursor.start)
+
+proc hash*(cursor: Cursor): Hash =
+  case cursor.kind:
+    of CursorInsert:
+      return !$(cursor.kind.hash() !& cursor.pos.hash())
+    of CursorSelection:
+      return !$(cursor.kind.hash() !& cursor.start.hash() !& cursor.stop.hash())
+
+proc `==`*(a, b: Cursor): bool =
+  if a.kind != b.kind:
+    return false
+  case a.kind:
+    of CursorInsert:
+      return a.pos == b.pos
+    of CursorSelection:
+      return a.start == b.start and a.stop == b.stop
+
+proc merge_cursors*(cursors: seq[Cursor]): seq[Cursor] =
+  var yet = init_hash_set[Cursor]()
+  result = @[]
+  for cursor in cursors:
+    if cursor in yet:
+      continue
+    result.add(cursor)
+    yet.incl(cursor)
 
 type
   Entry* = object

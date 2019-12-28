@@ -77,7 +77,7 @@ proc pattern_at*(text, pattern: seq[Rune], pos: int): bool =
   return true
 
 proc find*(text: seq[Rune], pattern: seq[Rune], start: int = 0): int =
-  for it in start..<(text.len - pattern.len):
+  for it in start..<(text.len - pattern.len + 1):
     if text.pattern_at(pattern, it):
       return it
   return -1

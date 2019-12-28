@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import sequtils, strutils, os, sugar, streams, deques, unicode
+import sequtils, strutils, os, sugar, streams, deques, unicode, sets, hashes
 import utils, ui_utils, termdiff, highlight, buffer, window_manager
 
 # Types
@@ -200,6 +200,11 @@ proc show_prompt(editor: Editor,
 proc hide_prompt(editor: Editor) = 
   editor.prompt = Prompt(kind: PromptNone)
 
+proc primary_cursor(editor: Editor): Cursor = editor.cursors[editor.cursors.len - 1]
+
+proc merge_cursors(editor: Editor) =
+  editor.cursors = editor.cursors.merge_cursors()
+
 proc update_cursor(editor: Editor, index: int, pos_raw: int, shift: bool) =
   let pos = max(min(pos_raw, editor.buffer.len), 0)
   case editor.cursors[index].kind:
@@ -238,7 +243,7 @@ proc make_cursor_hook(editor: Editor): CursorHook =
             editor.cursors[it].stop += delta
 
 proc update_scroll(editor: Editor, size: Index2d) =
-  let pos = editor.buffer.to_2d(editor.cursors[editor.cursors.len - 1].get_pos())
+  let pos = editor.buffer.to_2d(editor.primary_cursor().get_pos())
   
   while (pos.y - editor.scroll.y) < 4:
     editor.scroll.y -= 1
@@ -248,7 +253,7 @@ proc update_scroll(editor: Editor, size: Index2d) =
   editor.scroll.y = max(editor.scroll.y, 0)
 
 proc jump(editor: Editor, to: int) =
-  editor.jump_stack.add(editor.cursors[0].get_pos())
+  editor.jump_stack.add(editor.primary_cursor().get_pos())
   editor.cursors = @[Cursor(kind: CursorInsert, pos: to)]
 
 proc goto_line(editor: Editor, inputs: seq[seq[Rune]]) =
@@ -274,7 +279,7 @@ proc goto_line(editor: Editor, inputs: seq[seq[Rune]]) =
   editor.hide_prompt()
 
 proc find_pattern(editor: Editor, inputs: seq[seq[Rune]]) =
-  var pos = editor.buffer.text.find(inputs[0], editor.cursors[0].get_pos + 1)
+  var pos = editor.buffer.text.find(inputs[0], editor.primary_cursor().get_pos + 1)
   if pos == -1:
     pos = editor.buffer.text.find(inputs[0])
   if pos != -1:
@@ -311,18 +316,26 @@ proc copy(editor: Editor) =
 
 proc insert(editor: Editor, chr: Rune) =
   for it, cursor in editor.cursors:
-    if cursor.kind == CursorSelection:
-      continue
-    
-    editor.buffer.insert(cursor.pos, chr)  
-    
+    case cursor.kind:
+      of CursorInsert:
+        editor.buffer.insert(cursor.pos, chr)
+      of CursorSelection:
+        let cur = cursor.sort()
+        editor.buffer.delete(cur.start, cur.stop)
+        editor.cursors[it] = Cursor(kind: CursorInsert, pos: cur.start)
+        editor.buffer.insert(cur.start, chr)
+ 
 proc insert(editor: Editor, str: seq[Rune]) =
   for it, cursor in editor.cursors:
-    if cursor.kind != CursorInsert:
-      continue
-    
-    editor.buffer.insert(cursor.pos, str)    
-    
+    case cursor.kind:
+      of CursorInsert:
+        editor.buffer.insert(cursor.pos, str)
+      of CursorSelection:
+        let cur = cursor.sort()
+        editor.buffer.delete(cur.start, cur.stop)
+        editor.cursors[it] = Cursor(kind: CursorInsert, pos: cur.start)
+        editor.buffer.insert(cur.start, str)
+
 proc load_file(editor: Editor, path: string) =
   editor.buffer.unregister_hook(editor.cursor_hook_id)
   editor.buffer = editor.app.make_buffer(path)
@@ -363,6 +376,7 @@ method process_key(editor: Editor, key: Key) =
       else:
         for it, cursor in editor.cursors:
           editor.update_cursor(it, cursor.get_pos() - 1, key.shift)
+      editor.merge_cursors()
     of KeyArrowRight:
       if key.ctrl:
         for it, cursor in editor.cursors:
@@ -370,18 +384,21 @@ method process_key(editor: Editor, key: Key) =
       else:
         for it, cursor in editor.cursors:
           editor.update_cursor(it, cursor.get_pos() + 1, key.shift)
+      editor.merge_cursors()
     of KeyArrowUp:
       for it, cursor in editor.cursors:
         var index = editor.buffer.to_2d(cursor.get_pos())
         index.y -= 1
         index.y = max(index.y, 0)
         editor.update_cursor(it, editor.buffer.to_index(index), key.shift)
+      editor.merge_cursors()
     of KeyArrowDown:
       for it, cursor in editor.cursors:
         var index = editor.buffer.to_2d(cursor.get_pos())
         index.y += 1
         index.y = min(index.y, editor.buffer.lines.len - 1)
         editor.update_cursor(it, editor.buffer.to_index(index), key.shift)
+      editor.merge_cursors()
     of KeyReturn:
       for it, cursor in editor.cursors:
         if cursor.kind == CursorSelection:
@@ -447,9 +464,22 @@ method process_key(editor: Editor, key: Key) =
           of Rune('b'):
             if editor.jump_stack.len > 0:
               editor.cursors = @[Cursor(kind: CursorInsert, pos: editor.jump_stack.pop())]
+          of Rune('d'):
+            if editor.primary_cursor().kind == CursorSelection:
+              let
+                cur = editor.primary_cursor().sort()
+                text = editor.buffer.slice(cur.start, cur.stop)
+              var pos = editor.buffer.text.find(text, cur.stop)
+              if pos == -1:
+                pos = editor.buffer.text.find(text)
+              if pos != -1 and pos != cur.start:
+                editor.cursors.add(Cursor(kind: CursorSelection, start: pos, stop: pos + text.len))
+                editor.merge_cursors()
+          of Rune('y'):
+            var cur = editor.primary_cursor()
+            editor.cursors = @[cur]
           else: discard
       else:
-        editor.delete_selections()
         editor.insert(key.chr)
     else: discard
 

@@ -56,7 +56,7 @@ type
 
 method process_key*(window: Window, key: Key) {.base.} = quit "Not implemented"
 method render*(window: Window, box: Box, ren: var TermRenderer) {.base.} = quit "Not implemented"
-method close*(window: Window) = discard
+method close*(window: Window) {.base.} = discard
 
 # Launcher
 proc make_launcher(app: App): Window =
