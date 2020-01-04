@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import sequtils, strutils, os, sugar, streams, deques, unicode, sets, hashes
+import sequtils, strutils, os, sugar, streams, deques, unicode, sets, hashes, tables
 import utils, ui_utils, termdiff, highlight, buffer, window_manager
 
 # Types
@@ -287,7 +287,9 @@ proc find_pattern(editor: Editor, inputs: seq[seq[Rune]]) =
     editor.jump(pos)
 
 proc save_as(editor: Editor, inputs: seq[seq[Rune]]) =
-  editor.buffer.set_path($inputs[0], editor.app.languages)
+  let path = absolute_path($inputs[0])
+  editor.buffer.set_path(path, editor.app.languages)
+  editor.app.buffers[path] = editor.buffer
   editor.buffer.save()
   editor.hide_prompt()
 
@@ -415,8 +417,18 @@ method process_key(editor: Editor, key: Key) =
           indent_level = editor.buffer.indentation(cursor.pos)
           indent = repeat(' ', indent_level)
         editor.buffer.insert(cursor.pos, to_runes('\n' & indent))
-    of KeyPageDown: discard
-    of KeyPageUp: discard
+    of KeyPageDown:
+      for it, cursor in editor.cursors:
+        var pos = editor.buffer.to_2d(cursor.get_pos())
+        pos.y += editor.window_size.y
+        pos.y = pos.y.min(editor.buffer.lines.len - 1)
+        editor.update_cursor(it, editor.buffer.to_index(pos), key.shift)
+    of KeyPageUp:
+      for it, cursor in editor.cursors:
+        var pos = editor.buffer.to_2d(cursor.get_pos())
+        pos.y -= editor.window_size.y
+        pos.y = pos.y.max(0)
+        editor.update_cursor(it, editor.buffer.to_index(pos), key.shift)
     of KeyHome:
       for it, cursor in editor.cursors:
         var index = editor.buffer.to_2d(cursor.get_pos())
