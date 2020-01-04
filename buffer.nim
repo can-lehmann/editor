@@ -1,4 +1,3 @@
-
 # MIT License
 # 
 # Copyright (c) 2019 pseudo-random <josh.leh.2018@gmail.com>
@@ -21,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import utils, highlight, strutils, unicode, sequtils
+import utils, highlight, strutils, unicode, sequtils, tables
 
 type
   ActionKind = enum ActionDelete, ActionInsert
@@ -152,17 +151,19 @@ proc file_name*(buffer: Buffer): string =
 
 proc display_file_name*(buffer: Buffer): string =
   if buffer.file_name == "":
-    return "*Untitled file*"
-  
-  result = buffer.file_name
-
-  if buffer.changed:
-    result &= "*"
-    
-  if buffer.language != nil:
-    result &= " (" & buffer.language.name & ")"
+    result = "*Untitled file*"
   else:
-    result &= " (Text)"
+    result = buffer.file_name
+    if buffer.changed:
+      result &= "*"
+  
+  result &= " ("  
+  if buffer.language != nil:
+    result &= buffer.language.name
+  else:
+    result &= "Text"
+  result &= ", " & $buffer.indent_width
+  result &= ")"
 
 proc save*(buffer: Buffer) =
   write_file(buffer.file_path, $buffer.text)
@@ -384,6 +385,39 @@ proc make_buffer*(): Buffer =
     cursor_hooks: @[],
     indent_width: 2
   )
+
+proc guess_indent_width(text: seq[Rune]): int =
+  var
+    is_indent = true
+    width = 0
+    indents = init_table[int, int]()
+  for it, chr in text:
+    if chr == '\n':
+      is_indent = true
+      width = 0
+      continue
+    if chr != ' ':
+      is_indent = false
+      if width != 0:
+        if not indents.has_key(width):
+          indents[width] = 0
+        indents[width] += 1
+
+    if is_indent:
+      width += 1  
+  
+  var 
+    best = 2
+    best_score = 0
+  for indent_width in [8, 4, 2]:
+    var score = 0
+    for width, count in indents:
+      if width mod indent_width == 0:
+        score += count
+    if score > best_score:
+      best_score = score
+      best = indent_width
+  return best
   
 proc make_buffer*(path: string, lang: Language = nil): Buffer =
   let text = to_runes(path.read_file())
@@ -396,7 +430,7 @@ proc make_buffer*(path: string, lang: Language = nil): Buffer =
     tokens_done: false,
     language: lang,
     cursor_hooks: @[],
-    indent_width: 2
+    indent_width: text.guess_indent_width()
   )
 
 proc make_buffer*(path: string, langs: seq[Language]): Buffer =

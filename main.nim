@@ -30,7 +30,8 @@ var
   languages = @[Language(
     name: "Nim",
     highlighter: tokenize_nim,
-    file_exts: @["nim", "nims"]
+    file_exts: @["nim", "nims"],
+    indent_width: 2
   )]
   window_constructors = @[
     make_window_constructor("Editor", make_editor),

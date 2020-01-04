@@ -35,7 +35,8 @@ type
     name*: string
     highlighter*: proc (text: seq[Rune], initial: int): (iterator (): Token {.closure.}) 
     file_exts*: seq[string]
-    
+    indent_width*: int
+
 const
   NIM_KEYWORDS = [
     # Converted from https://nim-lang.org/docs/manual.html
