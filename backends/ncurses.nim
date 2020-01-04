@@ -58,6 +58,9 @@ proc getmaxy(win: Window): cint {.header: "<ncurses.h>", importc.}
 proc curs_set(mode: cint) {.header: "<ncurses.h>", importc.}
 proc raw() {.header: "<ncurses.h>", importc.}
 proc nonl() {.header: "<ncurses.h>", importc.}
+proc nodelay(window: Window, state: bool): int {.header: "<ncurses.h>", importc.}
+proc notimeout(window: Window, state: bool): int {.header: "<ncurses.h>", importc.}
+proc timeout(t: cint) {.header: "<ncurses.h>", importc.}
 
 var
   A_NORMAL {.header: "<ncurses.h>", importc.}: cint
@@ -78,11 +81,13 @@ proc setup_term*() =
   discard cbreak()
   nonl()
   discard keypad(stdscr, true)
+  timeout(10)
   raw()
   curs_set(0)
   
   
 proc reset_term*() =
+  discard notimeout(stdscr, true)
   discard enable_echo()
   discard endwin()
   
@@ -90,8 +95,10 @@ proc read_key*(): Key =
   let key_code = getch().int()
   
   case key_code:
+    of -1: return Key(kind: KeyNone)
     of 263, 127: return Key(kind: KeyBackspace)
     of 13: return Key(kind: KeyReturn)
+    of 27: return Key(kind: KeyEscape)
     of 259: return Key(kind: KeyArrowUp)
     of 258: return Key(kind: KeyArrowDown)
     of 260: return Key(kind: KeyArrowLeft)
@@ -112,8 +119,16 @@ proc read_key*(): Key =
     of 336: return Key(kind: KeyArrowDown, shift: true)
     of 393: return Key(kind: KeyArrowLeft, shift: true)
     of 402: return Key(kind: KeyArrowRight, shift: true)
+    of 565: return Key(kind: KeyArrowUp, shift: true, alt: true)
+    of 524: return Key(kind: KeyArrowDown, shift: true, alt: true)
+    of 559: return Key(kind: KeyArrowRight, shift: true, alt: true)
+    of 544: return Key(kind: KeyArrowLeft, shift: true, alt: true) 
     of 330: return Key(kind: KeyDelete)
     of 353: return Key(kind: KeyChar, chr: Rune('I'), ctrl: true, shift: true) 
+    of 339: return Key(kind: KeyPageUp)
+    of 338: return Key(kind: KeyPageDown)
+    of 262: return Key(kind: KeyHome)
+    of 360: return Key(kind: KeyEnd)
     else: discard
   
   if key_code <= 26:

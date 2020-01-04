@@ -37,9 +37,10 @@ type
     reverse*: bool
     
   KeyKind* = enum
-    KeyUnknown,
-    KeyChar, KeyReturn, KeyBackspace, KeyDelete,
-    KeyArrowLeft, KeyArrowRight, KeyArrowDown, KeyArrowUp
+    KeyNone, KeyUnknown,
+    KeyChar, KeyReturn, KeyBackspace, KeyDelete, KeyEscape,
+    KeyArrowLeft, KeyArrowRight, KeyArrowDown, KeyArrowUp,
+    KeyHome, KeyEnd, KeyPageUp, KeyPageDown
 
   Key* = object
     shift*: bool

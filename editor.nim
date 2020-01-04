@@ -73,6 +73,7 @@ type
     cursors: seq[Cursor]
     jump_stack: seq[int]
     cursor_hook_id: int
+    window_size: Index2d
  
 # Dialog / QuickOpen
 proc is_hidden(path: string): bool =
@@ -321,10 +322,10 @@ proc insert(editor: Editor, chr: Rune) =
         editor.buffer.insert(cursor.pos, chr)
       of CursorSelection:
         let cur = cursor.sort()
-        editor.buffer.delete(cur.start, cur.stop)
-        editor.cursors[it] = Cursor(kind: CursorInsert, pos: cur.start)
-        editor.buffer.insert(cur.start, chr)
- 
+        editor.cursors[it] = Cursor(kind: CursorInsert, pos: cur.start + 1)
+        editor.cursors[it] = Cursor(kind: CursorInsert, pos: cur.stop)
+        editor.buffer.replace(cur.start, cur.stop, @[chr])
+        
 proc insert(editor: Editor, str: seq[Rune]) =
   for it, cursor in editor.cursors:
     case cursor.kind:
@@ -332,10 +333,9 @@ proc insert(editor: Editor, str: seq[Rune]) =
         editor.buffer.insert(cursor.pos, str)
       of CursorSelection:
         let cur = cursor.sort()
-        editor.buffer.delete(cur.start, cur.stop)
-        editor.cursors[it] = Cursor(kind: CursorInsert, pos: cur.start)
-        editor.buffer.insert(cur.start, str)
-
+        editor.cursors[it] = Cursor(kind: CursorInsert, pos: cur.stop)
+        editor.buffer.replace(cur.start, cur.stop, str)
+        
 proc load_file(editor: Editor, path: string) =
   editor.buffer.unregister_hook(editor.cursor_hook_id)
   editor.buffer = editor.app.make_buffer(path)
@@ -346,6 +346,7 @@ proc load_file(editor: Editor, path: string) =
 proc new_buffer(editor: Editor) =
   editor.buffer.unregister_hook(editor.cursor_hook_id)
   editor.buffer = make_buffer()
+  editor.cursor_hook_id = editor.buffer.register_hook(editor.make_cursor_hook())
   editor.hide_prompt()
   editor.cursors = @[Cursor(kind: CursorInsert, pos: 0)]
 
@@ -383,26 +384,55 @@ method process_key(editor: Editor, key: Key) =
           delta = (editor.buffer.skip(cursor.get_pos(), 1)) - cursor.get_pos()
         update(editor.cursors[it], delta, editor.buffer.len, key.shift)
     of KeyArrowUp:
-      for it, cursor in editor.cursors:
-        var index = editor.buffer.to_2d(cursor.get_pos())
+      if key.alt:
+        var index = editor.buffer.to_2d(editor.primary_cursor().get_pos())
         index.y -= 1
-        index.y = max(index.y, 0)
-        editor.update_cursor(it, editor.buffer.to_index(index), key.shift)
+        index.y = max(index.y, 0) 
+        editor.cursors.add(Cursor(kind: CursorInsert, pos: editor.buffer.to_index(index)))
+      else:
+        for it, cursor in editor.cursors:
+          var index = editor.buffer.to_2d(cursor.get_pos())
+          index.y -= 1
+          index.y = max(index.y, 0)
+          editor.update_cursor(it, editor.buffer.to_index(index), key.shift)
     of KeyArrowDown:
-      for it, cursor in editor.cursors:
-        var index = editor.buffer.to_2d(cursor.get_pos())
+      if key.alt:
+        var index = editor.buffer.to_2d(editor.primary_cursor().get_pos())
         index.y += 1
-        index.y = min(index.y, editor.buffer.lines.len - 1)
-        editor.update_cursor(it, editor.buffer.to_index(index), key.shift)
+        index.y = min(index.y, editor.buffer.lines.len - 1) 
+        editor.cursors.add(Cursor(kind: CursorInsert, pos: editor.buffer.to_index(index)))
+      else:
+        for it, cursor in editor.cursors:
+          var index = editor.buffer.to_2d(cursor.get_pos())
+          index.y += 1
+          index.y = min(index.y, editor.buffer.lines.len - 1)
+          editor.update_cursor(it, editor.buffer.to_index(index), key.shift)
     of KeyReturn:
       for it, cursor in editor.cursors:
         if cursor.kind == CursorSelection:
-          continue
-        
+          continue        
         let
           indent_level = editor.buffer.indentation(cursor.pos)
           indent = repeat(' ', indent_level)
-        editor.buffer.insert(cursor.pos, to_runes('\n' & indent))    
+        editor.buffer.insert(cursor.pos, to_runes('\n' & indent))
+    of KeyPageDown: discard
+    of KeyPageUp: discard
+    of KeyHome:
+      for it, cursor in editor.cursors:
+        var index = editor.buffer.to_2d(cursor.get_pos())
+        index.x = 0
+        editor.cursors[it] = Cursor(kind: CursorInsert, pos: editor.buffer.to_index(index))
+    of KeyEnd:
+      for it, cursor in editor.cursors:
+        var index = editor.buffer.to_2d(cursor.get_pos())
+        if index.y == editor.buffer.lines.len - 1:
+          editor.cursors[it] = Cursor(kind: CursorInsert, pos: editor.buffer.len)  
+          continue
+        
+        index.y += 1
+        index.y = min(index.y, editor.buffer.lines.len - 1)
+        index.x = 0
+        editor.cursors[it] = Cursor(kind: CursorInsert, pos: (editor.buffer.to_index(index) - 1).max(0))
     of KeyBackspace:
       for it, cursor in editor.cursors:
         case cursor.kind
@@ -422,6 +452,9 @@ method process_key(editor: Editor, key: Key) =
             editor.cursors[it] = Cursor(kind: CursorInsert, pos: cur.start)
           of CursorInsert:
             editor.buffer.delete(cursor.pos, cursor.pos + 1)
+    of KeyEscape:
+      var cur = editor.primary_cursor()
+      editor.cursors = @[cur]
     of KeyChar:
       if key.ctrl:
         case key.chr:
@@ -496,6 +529,7 @@ method render(editor: Editor, box: Box, ren: var TermRenderer) =
     line_numbers_width = editor.compute_line_numbers_width() + 1
     prompt_size = editor.prompt.compute_size()
   
+  editor.window_size = box.size
   editor.update_scroll(box.size - Index2d(x: line_numbers_width + 1, y: prompt_size))
   
   # Render title

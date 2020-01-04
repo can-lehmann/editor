@@ -280,6 +280,8 @@ proc process_key*(app: App, key: Key): bool =
           app.root_pane.split(DirLeft, app)
         of KeyArrowRight:
           app.root_pane.split(DirRight, app)
+        of KeyNone:
+          return false
         else: discard
       app.mode = AppModeNone
       return
@@ -295,6 +297,8 @@ proc process_key*(app: App, key: Key): bool =
         of KeyArrowDown: discard app.root_pane.select_below()
         of KeyArrowLeft: discard app.root_pane.select_left()
         of KeyArrowRight: discard app.root_pane.select_right()
+        of KeyNone:
+          return false
         else: discard
       app.mode = AppModeNone
       return
@@ -312,19 +316,19 @@ proc process_key*(app: App, key: Key): bool =
                 return
               else:  discard
         of KeyArrowDown:
-          if key.alt:
+          if key.alt and not key.shift and not key.ctrl:
             discard app.root_pane.select_below()
             return
         of KeyArrowUp: 
-          if key.alt:
+          if key.alt and not key.shift and not key.ctrl:
             discard app.root_pane.select_above()
             return
         of KeyArrowLeft:
-          if key.alt:
+          if key.alt and not key.shift and not key.ctrl:
             discard app.root_pane.select_left()
             return
         of KeyArrowRight:
-          if key.alt:
+          if key.alt and not key.shift and not key.ctrl:
             discard app.root_pane.select_right()
             return
         else: discard

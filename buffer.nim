@@ -130,7 +130,7 @@ proc to_index*(buffer: Buffer, pos: Index2d): int =
   result = pos.x + buffer.lines[pos.y]
   
   if pos.y + 1 >= buffer.lines.len:
-    return max(buffer.text.len, result)
+    return min(buffer.text.len, result)
   
   if result >= buffer.lines[pos.y + 1]:
     result = buffer.lines[pos.y + 1] - 1
@@ -224,6 +224,22 @@ proc insert*(buffer: Buffer, pos: int, str: seq[Rune]) =
   buffer.insert_no_undo(pos, str)
   buffer.undo_stack.add(Action(kind: ActionInsert, insert_pos: pos, insert_text: str))
   buffer.redo_stack = @[]
+
+proc replace*(buffer: Buffer, start, stop: int, text: seq[Rune]) =
+  let
+    deleted_text = buffer.text.substr(start, stop - 1)
+    before = buffer.text.substr(0, start - 1)
+    after = buffer.text.substr(stop)
+
+  buffer.text = before & text & after  
+  buffer.delete_tokens(start)
+  buffer.reindex_lines()
+  buffer.changed = true
+
+  buffer.call_hooks(stop, text.len - deleted_text.len)
+  
+  buffer.undo_stack.add(Action(kind: ActionDelete, delete_pos: start, delete_text: deleted_text))
+  buffer.undo_stack.add(Action(kind: ActionInsert, insert_pos: start, insert_text: text))
 
 proc insert_newline*(buffer: Buffer, pos: int) =
   let

@@ -28,7 +28,8 @@ type
     keys: seq[Key]
 
 method process_key*(key_info: KeyInfo, key: Key) =
-  key_info.keys.add(key)
+  if key.kind != KeyNone:
+    key_info.keys.add(key)
 
 method render*(key_info: KeyInfo, box: Box, ren: var TermRenderer) =
   let title = "  " & strutils.align_left("Key Info", box.size.x - 2)
