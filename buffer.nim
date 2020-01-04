@@ -308,6 +308,36 @@ proc indent*(buffer: Buffer, start, stop: int) =
   for line_index in buffer.range_lines(start, stop):
     buffer.indent(line_index)
 
+proc match_bracket(buffer: Buffer, pos, delta: int, open_chr, close_chr: Rune): int =
+  if pos >= buffer.len:
+    return -1
+  var
+    it = pos
+    depth = 0
+  while it >= 0 and it < buffer.len:
+    if buffer.text[it] == open_chr:
+      depth += 1
+    elif buffer.text[it] == close_chr:
+      depth -= 1
+      if depth == 0:
+        return it
+    it += delta
+  return -1
+  
+proc match_bracket*(buffer: Buffer, pos: int): int = 
+  if pos >= buffer.len:
+    return -1
+  
+  let chr = buffer.text[pos]
+  case chr:
+    of '(': return buffer.match_bracket(pos, 1, '(', ')')
+    of ')': return buffer.match_bracket(pos, -1, ')', '(')
+    of '{': return buffer.match_bracket(pos, 1, '{', '}')
+    of '}': return buffer.match_bracket(pos, -1, '}', '{')
+    of '[': return buffer.match_bracket(pos, 1, '[', ']')
+    of ']': return buffer.match_bracket(pos, -1, ']', '[')
+    else: return -1
+
 proc skip*(buffer: Buffer, pos: int, dir: int): int =
   if buffer.text.len == 0:
     return 0

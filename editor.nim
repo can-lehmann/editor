@@ -585,6 +585,13 @@ method render(editor: Editor, box: Box, ren: var TermRenderer) =
       )
 
   # Render text
+  var bracket_matches: seq[int] = @[]
+  for cursor in editor.cursors:
+    if cursor.kind == CursorInsert:
+      let match = editor.buffer.match_bracket(cursor.pos)
+      if match != -1:
+        bracket_matches.add(match)
+  
   var current_token = 0
   
   for y in 0..<(box.size.y - prompt_size - 1):
@@ -610,7 +617,11 @@ method render(editor: Editor, box: Box, ren: var TermRenderer) =
         ren.put(editor.buffer[index], reverse=true)
         index += 1
         continue
-    
+      elif index in bracket_matches:
+        ren.put(editor.buffer[index], fg=Color(base: ColorBlack), bg=Color(base: ColorRed, bright: true))
+        index += 1
+        continue
+          
       var
         chr = editor.buffer[index]
         fg = Color(base: ColorDefault, bright: false)
