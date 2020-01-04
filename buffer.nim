@@ -1,3 +1,4 @@
+
 # MIT License
 # 
 # Copyright (c) 2019 pseudo-random <josh.leh.2018@gmail.com>
@@ -20,7 +21,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import utils, highlight, strutils, unicode
+import utils, highlight, strutils, unicode, sequtils
 
 type
   ActionKind = enum ActionDelete, ActionInsert
@@ -47,7 +48,8 @@ type
     cursor_hooks: seq[CursorHook]
     undo_stack: seq[Action]
     redo_stack: seq[Action]
-
+    indent_width*: int
+    
 proc len*(buffer: Buffer): int = buffer.text.len
 proc `[]`*(buffer: Buffer, index: int): Rune = buffer.text[index]
 
@@ -253,7 +255,59 @@ proc insert_newline*(buffer: Buffer, pos: int) =
 
   buffer.undo_stack.add(Action(kind: ActionInsert, insert_pos: pos, insert_text: @[Rune('\n')]))
   buffer.redo_stack = @[]
+
+proc range_lines(buffer: Buffer, start, stop: int): seq[int] =
+  for it, line in buffer.lines:
+    if line >= stop:
+      if result.len == 0 and it > 0:
+        result.add(it - 1)
+      break
+    if line >= start:
+      if result.len == 0 and it > 0 and start != line: 
+        result.add(it - 1)
+      result.add(it)
+
+  if result.len == 0 and buffer.lines.len != 0:
+    result.add(buffer.lines.len - 1)
+
+proc indent(buffer: Buffer, line: int) =
+  let
+    text = sequtils.repeat(Rune(' '), buffer.indent_width)
+    pos = buffer.lines[line]
+    before = buffer.text.substr(0, pos - 1) 
+    after = buffer.text.substr(pos)
   
+  buffer.text = before & text & after
+  buffer.delete_tokens(pos)
+  buffer.changed = true
+  buffer.call_hooks(pos, buffer.indent_width)
+  buffer.undo_stack.add(Action(kind: ActionInsert, insert_pos: pos, insert_text: text))
+  buffer.redo_stack = @[]
+  buffer.update_line_indices(pos + 1, buffer.indent_width)
+
+proc is_indented(buffer: Buffer, pos: int): bool =
+  if pos + buffer.indent_width - 1 >= buffer.len:
+    return false
+  
+  for it in 0..<buffer.indent_width:
+    if buffer.text[it + pos] != ' ':
+      return false
+  return true
+  
+proc unindent*(buffer: Buffer, line: int) =
+  let pos = buffer.lines[line]
+  if not buffer.is_indented(pos):
+    return
+  buffer.delete(pos, pos + buffer.indent_width)
+  
+proc unindent*(buffer: Buffer, start, stop: int) =
+  for line_index in buffer.range_lines(start, stop):
+    buffer.unindent(line_index)
+
+proc indent*(buffer: Buffer, start, stop: int) =
+  for line_index in buffer.range_lines(start, stop):
+    buffer.indent(line_index)
+
 proc skip*(buffer: Buffer, pos: int, dir: int): int =
   if buffer.text.len == 0:
     return 0
@@ -297,7 +351,8 @@ proc make_buffer*(): Buffer =
     tokens: @[],
     tokens_done: false,
     language: nil,
-    cursor_hooks: @[]
+    cursor_hooks: @[],
+    indent_width: 2
   )
   
 proc make_buffer*(path: string, lang: Language = nil): Buffer =
@@ -310,7 +365,8 @@ proc make_buffer*(path: string, lang: Language = nil): Buffer =
     tokens: @[],
     tokens_done: false,
     language: lang,
-    cursor_hooks: @[]
+    cursor_hooks: @[],
+    indent_width: 2
   )
 
 proc make_buffer*(path: string, langs: seq[Language]): Buffer =

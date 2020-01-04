@@ -471,11 +471,21 @@ method process_key(editor: Editor, key: Key) =
       if key.ctrl:
         case key.chr:
           of Rune('i'):
-            editor.delete_selections()
-            for it in 0..<2:
-              editor.insert(' ')
+            for cursor in editor.cursors:
+              case cursor.kind:
+                of CursorInsert:  
+                  editor.buffer.insert(cursor.pos, sequtils.repeat(Rune(' '), editor.buffer.indent_width))
+                of CursorSelection:
+                  let cur = cursor.sort()
+                  editor.buffer.indent(cur.start, cur.stop)
           of Rune('I'):
-            discard
+            for cursor in editor.cursors:
+              case cursor.kind:
+                of CursorInsert:  
+                  editor.buffer.unindent(editor.buffer.to_2d(cursor.pos).y)
+                of CursorSelection:
+                  let cur = cursor.sort()
+                  editor.buffer.unindent(cur.start, cur.stop)
           of Rune('a'): editor.select_all()
           of Rune('t'):
             editor.dialog = Dialog(
