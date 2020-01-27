@@ -80,7 +80,7 @@ proc is_float(str: seq[Rune]): bool =
             chr == '_' or
             (chr == '+' and it == 0 and str.len > 1) or
             (chr == '-' and it == 0 and str.len > 1)):
-      if chr == '.' and not point:
+      if chr == '.' and not point and str.len > 1:
         point = true
       else:
         return false
@@ -140,7 +140,13 @@ proc tokenize_nim*(text: seq[Rune], initial: int): (iterator (): Token {.closure
             it += 1
         of ModeNone:
           case chr:
-            of ' ', '\t', '\n', '\r', '.', ':', '<', '>', '[', ']', '(', ')', '{', '}', ',', ';', '=', '`', '\"', '#', '\'':
+            of '.':
+              if is_float(cur & chr):
+                cur &= chr
+              elif cur.len > 0:
+                yield Token(kind: token_kind(cur), start: start, stop: it)
+                cur = @[]
+            of ' ', '\t', '\n', '\r', ':', '<', '>', '[', ']', '(', ')', '{', '}', ',', ';', '=', '`', '\"', '#', '\'':
               if cur.len > 0:
                 yield Token(kind: token_kind(cur), start: start, stop: it)
                 cur = @[]
@@ -178,6 +184,52 @@ proc tokenize_nim*(text: seq[Rune], initial: int): (iterator (): Token {.closure
       else:          
         if cur.len > 0:
           yield Token(kind: token_kind(cur), start: start, stop: it)
+
+proc tokenize_html*(text: seq[Rune], initial: int): (iterator (): Token {.closure.}) =
+  return iterator (): Token {.closure.} =
+    type Mode = enum ModeNone, ModeString
+    
+    var
+      cur: seq[Rune] = @[]
+      it = initial
+      mode = ModeNone
+      start = 0
+      is_tag = false
+    
+    while it < text.len:
+      let chr = text[it]
+      case mode:
+        of ModeString:
+          case chr:
+            of '\"':
+              yield Token(kind: TokenString, start: start, stop: it + 1)
+              cur = @[]
+            else:
+              cur &= chr
+        of ModeNone:
+          case chr:
+            of ' ', '\n', '\r', '\t', '\"', '=', '<', '>', '/', '-':
+              if cur.len > 0:
+                if is_tag:
+                  yield Token(kind: TokenKeyword, start: start, stop: it)
+                  is_tag = false
+                else:
+                  yield Token(kind: TokenName, start: start, stop: it)
+                cur = @[]
+              case chr:
+                of '<':
+                  is_tag = true
+                of '>':
+                  is_tag = false
+                of '\"':
+                  mode = ModeString
+                  start = it
+                else: discard
+            else:
+              if cur.len == 0:
+                start = it
+              cur &= chr    
+      it += 1
 
 proc is_inside*(token: Token, index: int): bool =
   index >= token.start and index < token.stop

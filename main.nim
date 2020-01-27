@@ -27,12 +27,20 @@ setup_term()
 
 var
   cur_screen = make_term_screen()
-  languages = @[Language(
-    name: "Nim",
-    highlighter: tokenize_nim,
-    file_exts: @["nim", "nims"],
-    indent_width: 2
-  )]
+  languages = @[
+    Language(
+      name: "Nim",
+      highlighter: tokenize_nim,
+      file_exts: @["nim", "nims"],
+      indent_width: 2
+    ),
+    Language(
+      name: "HTML",
+      highlighter: tokenize_html,
+      file_exts: @["html", "htm"],
+      indent_width: 2
+    )
+  ]
   window_constructors = @[
     make_window_constructor("Editor", make_editor),
     make_window_constructor("Calc", make_calc),
