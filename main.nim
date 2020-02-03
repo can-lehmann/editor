@@ -1,6 +1,6 @@
 # MIT License
-# 
-# Copyright (c) 2019 pseudo-random <josh.leh.2018@gmail.com>
+#
+# Copyright (c) 2019 - 2020 pseudo-random <josh.leh.2018@gmail.com>
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -8,7 +8,7 @@
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
 #
@@ -20,6 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import unicode, tables
 import termdiff, highlight, window_manager
 import editor, keyinfo, calc
 
@@ -38,7 +39,10 @@ var
       name: "HTML",
       highlighter: tokenize_html,
       file_exts: @["html", "htm"],
-      indent_width: 2
+      indent_width: 2,
+      snippets: to_table({
+        to_runes("html"): to_runes("<html>\n  <head>\n    <meta charset=\"utf-8\">\n  </head>\n  <body>\n  </body>\n</html>")
+      })
     )
   ]
   window_constructors = @[
@@ -63,12 +67,12 @@ while true:
   if app.process_key(key):
     quit_app()
     break
-  
+
   var
     screen = make_term_screen()
     ren = make_term_renderer(screen)
   app.render(ren)
-  
+
   cur_screen.apply(screen)
   cur_screen = screen
 

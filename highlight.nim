@@ -1,6 +1,6 @@
 # MIT License
 # 
-# Copyright (c) 2019 pseudo-random <josh.leh.2018@gmail.com>
+# Copyright (c) 2019 - 2020 pseudo-random <josh.leh.2018@gmail.com>
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import sequtils, strutils, os, sugar, streams, deques, unicode
+import sequtils, strutils, os, sugar, streams, deques, unicode, tables
 import utils, termdiff
 
 type
@@ -36,6 +36,7 @@ type
     highlighter*: proc (text: seq[Rune], initial: int): (iterator (): Token {.closure.}) 
     file_exts*: seq[string]
     indent_width*: int
+    snippets*: Table[seq[Rune], seq[Rune]]
 
 const
   NIM_KEYWORDS = [
@@ -204,6 +205,7 @@ proc tokenize_html*(text: seq[Rune], initial: int): (iterator (): Token {.closur
             of '\"':
               yield Token(kind: TokenString, start: start, stop: it + 1)
               cur = @[]
+              mode = ModeNone
             else:
               cur &= chr
         of ModeNone:

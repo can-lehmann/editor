@@ -1,6 +1,6 @@
 # MIT License
 # 
-# Copyright (c) 2019 pseudo-random <josh.leh.2018@gmail.com>
+# Copyright (c) 2019 - 2020 pseudo-random <josh.leh.2018@gmail.com>
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -81,5 +81,12 @@ proc find*(text: seq[Rune], pattern: seq[Rune], start: int = 0): int =
     if text.pattern_at(pattern, it):
       return it
   return -1
+
+proc join*(strs: seq[seq[Rune]], chr: Rune): seq[Rune] =
+  result = @[]
+  for it, str in strs:
+    if it != 0:
+      result.add(chr)
+    result &= str
 
 converter to_rune*(chr: char): Rune = Rune(chr)

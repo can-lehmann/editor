@@ -1,6 +1,6 @@
 # MIT License
 # 
-# Copyright (c) 2019 pseudo-random <josh.leh.2018@gmail.com>
+# Copyright (c) 2019 - 2020 pseudo-random <josh.leh.2018@gmail.com>
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -21,7 +21,7 @@
 # SOFTWARE.
 
 import sequtils, strutils, os, sugar, streams, deques, unicode, sets, hashes, tables
-import utils, ui_utils, termdiff, highlight, buffer, window_manager
+import utils, ui_utils, termdiff, highlight, buffer, window_manager, autocomplete
 
 # Types
 type  
@@ -74,6 +74,7 @@ type
     jump_stack: seq[int]
     cursor_hook_id: int
     window_size: Index2d
+    autocomplete: AutocompleteContext
  
 # Dialog / QuickOpen
 proc is_hidden(path: string): bool =
@@ -291,6 +292,7 @@ proc save_as(editor: Editor, inputs: seq[seq[Rune]]) =
   editor.buffer.set_path(path, editor.app.languages)
   editor.app.buffers[path] = editor.buffer
   editor.buffer.save()
+  editor.autocomplete.recount_words()
   editor.hide_prompt()
 
 proc select_all(editor: Editor) =
@@ -344,6 +346,7 @@ proc load_file(editor: Editor, path: string) =
   editor.cursor_hook_id = editor.buffer.register_hook(editor.make_cursor_hook())
   editor.hide_prompt()
   editor.cursors = @[Cursor(kind: CursorInsert, pos: 0)]
+  editor.autocomplete = make_autocomplete_context(editor.buffer)
 
 proc new_buffer(editor: Editor) =
   editor.buffer.unregister_hook(editor.cursor_hook_id)
@@ -351,6 +354,7 @@ proc new_buffer(editor: Editor) =
   editor.cursor_hook_id = editor.buffer.register_hook(editor.make_cursor_hook())
   editor.hide_prompt()
   editor.cursors = @[Cursor(kind: CursorInsert, pos: 0)]
+  editor.autocomplete = make_autocomplete_context(editor.buffer)
 
 method process_key(editor: Editor, key: Key) = 
   if key.kind == KeyChar and key.ctrl and key.chr == Rune('e'):
@@ -471,6 +475,15 @@ method process_key(editor: Editor, key: Key) =
       if key.ctrl:
         case key.chr:
           of Rune('i'):
+            if editor.cursors.len == 1 and editor.cursors[0].kind == CursorInsert:
+              let completions = editor.autocomplete.predict(editor.cursors[0].pos)
+              if completions.len > 0:
+                let
+                  cursor = editor.cursors[0]
+                  compl = completions[0]
+              
+                editor.buffer.replace(cursor.pos - compl.pos, cursor.pos, compl.text)
+                return
             for cursor in editor.cursors:
               case cursor.kind:
                 of CursorInsert:  
@@ -497,6 +510,7 @@ method process_key(editor: Editor, key: Key) =
               editor.show_prompt("Save", @["File Name:"], callback=save_as)
             else:
               editor.buffer.save()
+              editor.autocomplete.recount_words()
               editor.show_info(@["File saved."])
           of Rune('n'):
             editor.new_buffer()
@@ -686,7 +700,8 @@ proc make_editor*(app: App, buffer: Buffer): Editor =
     buffer: buffer,
     scroll: Index2d(x: 0, y: 0),
     cursors: @[Cursor(kind: CursorInsert, pos: 0)],
-    app: app
+    app: app,
+    autocomplete: make_autocomplete_context(buffer)
   )
   result.cursor_hook_id = result.buffer.register_hook(result.make_cursor_hook())
 
