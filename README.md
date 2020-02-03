@@ -37,7 +37,7 @@ A simple text editor written in Nim.
 
 #### Multiple Cursors
 - `Ctrl + D`: Select next
-- `Ctrl + Alt + Up/Down`: New cursor
+- `Shift + Alt + Up/Down`: New cursor
 - `Escape` / `Ctrl + O`: Remove cursors
 
 ## License
