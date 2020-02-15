@@ -48,6 +48,7 @@ type
   FileEntry = object
     name: string
     path: string
+    changed: bool
 
   QuickOpen = ref object
     entry: Entry
@@ -94,7 +95,10 @@ proc index_project(dir: string): seq[string] =
 proc index_project(): seq[FileEntry] =
   let paths = index_project(get_current_dir())
   return paths
-    .map(path => FileEntry(path: path, name: path.relative_path(get_current_dir())))
+    .map(path => FileEntry(
+      path: path,
+      name: path.relative_path(get_current_dir())
+    ))
     .filter(entry => not entry.name.is_hidden())
     
 proc load_file(editor: Editor, path: string)
@@ -135,11 +139,15 @@ proc render(quick_open: QuickOpen, box: Box, ren: var TermRenderer) =
     ren.put(repeat(" ", label.len), fg=Color(base: ColorBlack), bg=Color(base: ColorWhite, bright: true))
     ren.put(" ")
     if it < quick_open.shown_files.len:
-      ren.put(quick_open.shown_files[it].name, reverse=(quick_open.selected == it))
+      var name = quick_open.shown_files[it].name
+      if quick_open.shown_files[it].changed:
+        name &= "*"
+      ren.put(name, reverse=(quick_open.selected == it))
     it += 1
 
 proc make_quick_open(app: App): owned QuickOpen =
   let files = index_project()
+    .map(entry => FileEntry(path: entry.path, name: entry.name, changed: app.is_changed(entry.path)))
   return QuickOpen(entry: make_entry(app.copy_buffer), files: files, shown_files: files, selected: 0)
 
 # Dialog
@@ -287,7 +295,18 @@ proc find_pattern(editor: Editor, inputs: seq[seq[Rune]]) =
   if pos != -1:
     editor.jump(pos)
 
+proc replace_pattern(editor: Editor, inputs: seq[seq[Rune]]) =
+  var pos = editor.buffer.text.find(inputs[0], editor.primary_cursor().get_pos + 1)
+  if pos == -1:
+    pos = editor.buffer.text.find(inputs[0])
+  if pos != -1:
+    editor.jump(pos)
+    editor.buffer.replace(pos, pos + inputs[0].len, inputs[1])
+
 proc save_as(editor: Editor, inputs: seq[seq[Rune]]) =
+  if inputs[0].len == 0:
+    return
+  
   let path = absolute_path($inputs[0])
   editor.buffer.set_path(path, editor.app.languages)
   editor.app.buffers[path] = editor.buffer
@@ -515,7 +534,7 @@ method process_key(editor: Editor, key: Key) =
           of Rune('n'):
             editor.new_buffer()
           of Rune('r'):
-            editor.show_prompt("Find and replace", @["Pattern: ", "Replace: "], callback=find_pattern)
+            editor.show_prompt("Find and replace", @["Pattern: ", "Replace: "], callback=replace_pattern)
           of Rune('f'): editor.show_prompt("Find", @["Pattern: "], callback=find_pattern)
           of Rune('g'): editor.show_prompt("Go to Line", @["Line: "], callback=goto_line)
           of Rune('v'):

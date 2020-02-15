@@ -268,6 +268,16 @@ proc make_buffer*(app: App, path: string): Buffer =
   result = make_buffer(path, app.languages)
   app.buffers[path] = result
 
+proc is_changed*(app: App, path: string): bool =
+  if not app.buffers.has_key(path):
+    return false
+  return app.buffers[path].changed
+
+proc list_changed*(app: App): seq[string] =
+  for path in app.buffers.keys:
+    if app.buffers[path].changed:
+      result.add(path)
+
 proc process_key*(app: App, key: Key): bool =
   case app.mode:
     of AppModeNewPane:
