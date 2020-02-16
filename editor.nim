@@ -417,6 +417,7 @@ method process_mouse(editor: Editor, mouse: Mouse) =
 method process_key(editor: Editor, key: Key) = 
   if key.kind != KeyUnknown and key.kind != KeyNone:
     editor.detach_scroll = false
+
   if key.kind == KeyChar and key.ctrl and key.chr == Rune('e'):
     if editor.dialog.kind != DialogNone:
       editor.dialog = Dialog(kind: DialogNone)
@@ -433,9 +434,10 @@ method process_key(editor: Editor, key: Key) =
       return
   
     editor.prompt.process_key(key)
-    return
-    
+    return    
 
+  defer: editor.buffer.finish_undo_frame()
+  
   case key.kind:
     of KeyArrowLeft:
       for it, cursor in editor.cursors:
