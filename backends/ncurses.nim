@@ -104,6 +104,9 @@ var
 var stdscr {.header: "<ncurses.h>", importc.}: Window
 
 # Backend Interface
+var
+  prev_mouse_mask: MouseMask
+  prev_mouse_interval: cint
 proc setup_term*() =
   setlocale(LC_ALL, "")
   discard initscr()
@@ -113,8 +116,8 @@ proc setup_term*() =
   discard cbreak()
   nonl()
   discard keypad(stdscr, true)
-  discard mousemask(ALL_MOUSE_EVENTS or REPORT_MOUSE_POSITION, nil)
-  discard mouseinterval(0)
+  discard mousemask(ALL_MOUSE_EVENTS or REPORT_MOUSE_POSITION, prev_mouse_mask.addr)
+  prev_mouse_interval = mouseinterval(0)
 
   timeout(10)
   raw()
@@ -122,6 +125,10 @@ proc setup_term*() =
   stdout.write("\x1b[?1003h\n")  
   
 proc reset_term*() =
+  stdout.write("\x1b[?1003l\n")  
+  
+  discard mousemask(prev_mouse_mask, nil)
+  discard mouseinterval(prev_mouse_interval)
   discard notimeout(stdscr, true)
   discard enable_echo()
   discard endwin()
