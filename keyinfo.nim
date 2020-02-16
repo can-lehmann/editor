@@ -23,13 +23,25 @@
 import strutils, unicode, utils, window_manager, termdiff
 
 type
+  EventKind = enum EventKey, EventMouse
+
+  Event = object
+    case kind: EventKind:
+      of EventKey:
+        key: Key
+      of EventMouse:
+        mouse: Mouse
+
   KeyInfo* = ref object of Window
     app: App
-    keys: seq[Key]
+    events: seq[Event]
 
 method process_key*(key_info: KeyInfo, key: Key) =
   if key.kind != KeyNone:
-    key_info.keys.add(key)
+    key_info.events.add(Event(kind: EventKey, key: key))
+
+method process_mouse*(key_info: KeyInfo, mouse: Mouse) =
+  key_info.events.add(Event(kind: EventMouse, mouse: mouse))
 
 method render*(key_info: KeyInfo, box: Box, ren: var TermRenderer) =
   let title = "  " & strutils.align_left("Key Info", box.size.x - 2)
@@ -41,14 +53,17 @@ method render*(key_info: KeyInfo, box: Box, ren: var TermRenderer) =
     ren.put(" ", fg=Color(base: ColorBlack), bg=Color(base: ColorWhite, bright: true))
   
   for y in 0..<(box.size.y - 1):
-    let it = max(key_info.keys.len - (box.size.y - 1), 0) + y
-    if it >= key_info.keys.len or it < 0:
+    let it = max(key_info.events.len - (box.size.y - 1), 0) + y
+    if it >= key_info.events.len or it < 0:
       break
     ren.move_to(box.min.x + 2, box.min.y + 1 + y)
-    let key = key_info.keys[it]
-    ren.put($key)
-    if key.kind == KeyChar:
-      ren.put(" (" & $int(key.chr) & ")")
+    let event = key_info.events[it]
+    case event.kind:
+      of EventKey:
+        ren.put($event.key)
+        if event.key.kind == KeyChar:
+          ren.put(" (" & $int(event.key.chr) & ")")
+      of EventMouse: ren.put($event.mouse)
     
 proc make_key_info*(app: App): Window =
-  return KeyInfo(app: app, keys: @[])
+  return KeyInfo(app: app, events: @[])

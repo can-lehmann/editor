@@ -22,10 +22,13 @@
 
 import utils, sequtils, strutils, backends/ncurses, backends/common, unicode
 
-export setup_term, reset_term, read_key
+export setup_term, reset_term, read_key, read_mouse, terminal_width, terminal_height
 
 export Color, BaseColor
-export Key, KeyKind
+export Key, KeyKind, Mouse, MouseKind
+
+proc pos*(mouse: Mouse): Index2d =
+  Index2d(x: mouse.x, y: mouse.y)
 
 type
   TermScreen* = ref object

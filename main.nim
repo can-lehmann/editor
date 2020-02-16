@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import unicode, tables
+import unicode, tables, os
 import termdiff, highlight, window_manager
 import editor, keyinfo, calc
 
@@ -53,6 +53,12 @@ var
   app = make_app(languages, window_constructors)
   root_pane = Pane(kind: PaneWindow, window: app.make_editor())
 
+if param_count() > 0:
+  root_pane = Pane(kind: PaneWindow, window: app.make_editor(param_str(1).absolute_path(get_current_dir())))
+  for it in 2..param_count():
+    var pane = Pane(kind: PaneWindow, window: app.make_editor(param_str(it).absolute_path(get_current_dir())))
+    root_pane = Pane(kind: PaneSplitH, pane_a: root_pane, pane_b: pane)
+
 app.root_pane = root_pane
 
 block:
@@ -64,9 +70,12 @@ import times
 while true:
   let key = read_key()
 
-  if app.process_key(key):
-    quit_app()
-    break
+  if key.kind == KeyMouse:
+    app.process_mouse(read_mouse())
+  else:
+    if app.process_key(key):
+      quit_app()
+      break
 
   var
     screen = make_term_screen()

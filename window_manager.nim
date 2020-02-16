@@ -55,6 +55,7 @@ type
     buffers*: Table[string, Buffer]
 
 method process_key*(window: Window, key: Key) {.base.} = quit "Not implemented"
+method process_mouse*(window: Window, mouse: Mouse) {.base.} = discard
 method render*(window: Window, box: Box, ren: var TermRenderer) {.base.} = quit "Not implemented"
 method close*(window: Window) {.base.} = discard
 
@@ -222,6 +223,48 @@ proc open_window(pane: Pane, window: Window) =
 proc open_launcher(app: App) =
   app.root_pane.open_window(app.make_launcher())
  
+proc process_mouse*(pane: Pane, mouse: Mouse, box: Box) =
+  case pane.kind:
+    of PaneWindow:
+      var mouse_rel = mouse
+      mouse_rel.x -= box.min.x
+      mouse_rel.y -= box.min.y
+      pane.window.process_mouse(mouse_rel)
+    of PaneSplitH:
+      let
+        split = box.size.x div 2 + box.min.x
+        right = Box(min: Index2d(x: split, y: box.min.y), max: box.max)
+        left = Box(min: box.min, max: Index2d(x: split, y: box.max.y))
+      if mouse.kind == MouseUnknown or mouse.kind == MouseNone or mouse.kind == MouseMove:
+        if pane.selected:
+          pane.pane_b.process_mouse(mouse, right)
+        else:
+          pane.pane_a.process_mouse(mouse, left)
+      else:
+        if left.is_inside(mouse.pos):
+          pane.selected = false
+          pane.pane_a.process_mouse(mouse, left)
+        else:
+          pane.selected = true
+          pane.pane_b.process_mouse(mouse, right)
+    of PaneSplitV:
+      let
+        split = box.size.y div 2 + box.min.y
+        bottom = Box(min: Index2d(x: box.min.x, y: split), max: box.max)
+        top = Box(min: box.min, max: Index2d(x: box.max.x, y: split))
+      if mouse.kind == MouseUnknown or mouse.kind == MouseNone or mouse.kind == MouseMove:
+        if pane.selected:
+          pane.pane_b.process_mouse(mouse, bottom)
+        else:
+          pane.pane_a.process_mouse(mouse, top)
+      else:
+        if top.is_inside(mouse.pos):
+          pane.selected = false
+          pane.pane_a.process_mouse(mouse, top)
+        else:
+          pane.selected = true
+          pane.pane_b.process_mouse(mouse, bottom)
+
 proc process_key*(pane: Pane, key: Key) =
   case pane.kind:
     of PaneWindow:
@@ -277,6 +320,12 @@ proc list_changed*(app: App): seq[string] =
   for path in app.buffers.keys:
     if app.buffers[path].changed:
       result.add(path)
+
+proc process_mouse*(app: App, mouse: Mouse) =
+  app.root_pane.process_mouse(mouse, Box(
+    min: Index2d(x: 0, y: 0),
+    max: Index2d(x: terminal_width(), y: terminal_height())
+  ))
 
 proc process_key*(app: App, key: Key): bool =
   case app.mode:

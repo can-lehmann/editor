@@ -35,9 +35,26 @@ type
     fg*: Color
     bg*: Color
     reverse*: bool
+
+  MouseKind* = enum
+    MouseUnknown, MouseNone,
+    MouseMove,
+    MouseDown, MouseUp,
+    MouseClick, MouseDoubleClick, MouseTripleClick
+
+  Mouse* = object
+    x*: int
+    y*: int
+    buttons*: array[3, bool]
+    case kind*: MouseKind:
+      of MouseUp, MouseDown, MouseClick, MouseDoubleClick, MouseTripleClick:
+        button*: int
+      of MouseUnknown:
+        state*: uint64
+      else: discard
     
   KeyKind* = enum
-    KeyNone, KeyUnknown,
+    KeyNone, KeyUnknown, KeyMouse,
     KeyChar, KeyReturn, KeyBackspace, KeyDelete, KeyEscape,
     KeyArrowLeft, KeyArrowRight, KeyArrowDown, KeyArrowUp,
     KeyHome, KeyEnd, KeyPageUp, KeyPageDown

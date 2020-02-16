@@ -29,6 +29,15 @@ type
   WindowObj {.header: "<ncurses.h>", importc:"WINDOW".} = object
   Window = ptr WindowObj
 
+  MouseMask {.header: "<ncurses.h>", importc:"mmask_t".} = culong
+
+  MouseEvent {.header: "<ncurses.h>", importc:"MEVENT".} = object
+    id: cshort
+    x: cint
+    y: cint
+    z: cint
+    bstate: MouseMask
+
 proc setlocale(category: cint, locale: cstring) {.header: "<locale.h>", importc.}
 
 proc initscr(): Window {.header: "<ncurses.h>", importc.}
@@ -61,6 +70,10 @@ proc nonl() {.header: "<ncurses.h>", importc.}
 proc nodelay(window: Window, state: bool): int {.header: "<ncurses.h>", importc.}
 proc notimeout(window: Window, state: bool): int {.header: "<ncurses.h>", importc.}
 proc timeout(t: cint) {.header: "<ncurses.h>", importc.}
+proc has_mouse(): bool {.header: "<ncurses.h>", importc.}
+proc mousemask(newmask: MouseMask, oldmask: ptr MouseMask): MouseMask {.header: "<ncurses.h>", importc.}
+proc getmouse(evt: ptr MouseEvent): cint {.header: "<ncurses.h>", importc.}
+proc mouseinterval(interval: cint): cint {.header: "<ncurses.h>", importc.}
 
 var
   A_NORMAL {.header: "<ncurses.h>", importc.}: cint
@@ -68,6 +81,25 @@ var
   A_BOLD {.header: "<ncurses.h>", importc.}: cint
   A_DIM {.header: "<ncurses.h>", importc.}: cint
   LC_ALL {.header: "<locale.h>", importc.}: cint
+
+var
+  ALL_MOUSE_EVENTS {.header: "<ncurses.h>", importc.}: MouseMask
+  REPORT_MOUSE_POSITION {.header: "<ncurses.h>", importc.}: MouseMask
+  BUTTON1_PRESSED {.header: "<ncurses.h>", importc.}: MouseMask
+  BUTTON1_RELEASED {.header: "<ncurses.h>", importc.}: MouseMask
+  BUTTON2_PRESSED {.header: "<ncurses.h>", importc.}: MouseMask
+  BUTTON2_RELEASED {.header: "<ncurses.h>", importc.}: MouseMask
+  BUTTON3_PRESSED {.header: "<ncurses.h>", importc.}: MouseMask
+  BUTTON3_RELEASED {.header: "<ncurses.h>", importc.}: MouseMask
+  BUTTON4_PRESSED {.header: "<ncurses.h>", importc.}: MouseMask
+  BUTTON4_RELEASED {.header: "<ncurses.h>", importc.}: MouseMask
+  BUTTON5_PRESSED {.header: "<ncurses.h>", importc.}: MouseMask
+  BUTTON5_RELEASED {.header: "<ncurses.h>", importc.}: MouseMask
+
+  BUTTON1_CLICKED {.header: "<ncurses.h>", importc.}: MouseMask
+  KEY_MOUSE_VALUE {.header: "<ncurses.h>", importc: "KEY_MOUSE".}: cint
+  OK {.header: "<ncurses.h>", importc.}: cint
+
 
 var stdscr {.header: "<ncurses.h>", importc.}: Window
 
@@ -81,10 +113,13 @@ proc setup_term*() =
   discard cbreak()
   nonl()
   discard keypad(stdscr, true)
+  discard mousemask(ALL_MOUSE_EVENTS or REPORT_MOUSE_POSITION, nil)
+  discard mouseinterval(0)
+
   timeout(10)
   raw()
   curs_set(0)
-  
+  stdout.write("\x1b[?1003h\n")  
   
 proc reset_term*() =
   discard notimeout(stdscr, true)
@@ -93,6 +128,9 @@ proc reset_term*() =
   
 proc read_key*(): Key =
   let key_code = getch().int()
+  
+  if key_code == KEY_MOUSE_VALUE:
+    return Key(kind: KeyMouse)
   
   case key_code:
     of -1: return Key(kind: KeyNone)
@@ -148,6 +186,45 @@ proc read_key*(): Key =
     return Key(kind: KeyChar, chr: str.rune_at(0))
 
   return Key(kind: KeyUnknown, key_code: key_code)
+
+
+var buttons: array[3, bool] = [false, false, false]
+proc read_mouse*(): Mouse =
+  var event: MouseEvent
+
+  if getmouse(event.addr) != OK:
+    return Mouse(kind: MouseNone)
+
+  if (event.bstate and REPORT_MOUSE_POSITION) != 0:
+    return Mouse(kind: MouseMove, x: event.x.int, y: event.y.int, buttons: buttons)
+  elif (event.bstate and BUTTON1_PRESSED) != 0:
+    buttons[0] = true
+    return Mouse(kind: MouseDown, button: 1, x: event.x.int, y: event.y.int, buttons: buttons)
+  elif (event.bstate and BUTTON1_RELEASED) != 0:
+    buttons[0] = false
+    return Mouse(kind: MouseUp, button: 1, x: event.x.int, y: event.y.int, buttons: buttons)
+  elif (event.bstate and BUTTON2_PRESSED) != 0:
+    buttons[1] = true
+    return Mouse(kind: MouseDown, button: 2, x: event.x.int, y: event.y.int, buttons: buttons)
+  elif (event.bstate and BUTTON2_RELEASED) != 0:
+    buttons[1] = false
+    return Mouse(kind: MouseUp, button: 2, x: event.x.int, y: event.y.int, buttons: buttons)
+  elif (event.bstate and BUTTON3_PRESSED) != 0:
+    buttons[2] = true
+    return Mouse(kind: MouseDown, button: 3, x: event.x.int, y: event.y.int, buttons: buttons)
+  elif (event.bstate and BUTTON3_RELEASED) != 0:
+    buttons[2] = false
+    return Mouse(kind: MouseUp, button: 3, x: event.x.int, y: event.y.int, buttons: buttons)
+  elif (event.bstate and BUTTON4_PRESSED) != 0:
+    return Mouse(kind: MouseDown, button: 4, x: event.x.int, y: event.y.int, buttons: buttons)
+  elif (event.bstate and BUTTON4_RELEASED) != 0:
+    return Mouse(kind: MouseUp, button: 4, x: event.x.int, y: event.y.int, buttons: buttons)
+  elif (event.bstate and BUTTON5_PRESSED) != 0:
+    return Mouse(kind: MouseDown, button: 5, x: event.x.int, y: event.y.int, buttons: buttons)
+  elif (event.bstate and BUTTON5_RELEASED) != 0:
+    return Mouse(kind: MouseUp, button: 5, x: event.x.int, y: event.y.int, buttons: buttons)
+  
+  return Mouse(kind: MouseUnknown, x: event.x.int, y: event.y.int, state: event.bstate.uint16)
   
 proc terminal_width*(): int = stdscr.getmaxx().int()
 proc terminal_height*(): int = stdscr.getmaxy().int()
@@ -212,13 +289,15 @@ when isMainModule:
   nonl()
   discard keypad(stdscr, true)
   raw()
-  var it = 0
+  discard mousemask(ALL_MOUSE_EVENTS or REPORT_MOUSE_POSITION, nil)
+  discard addstr($has_mouse())
+  var it = 1
   while true:
     let chr = getch().int()
     if chr == ord('q'):
       break
+    discard move(it.cint, 0)
     discard addstr($chr)
     it += 1
-    discard move(it.cint, 0)
     discard refresh()
   discard endwin()

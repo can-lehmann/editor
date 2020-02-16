@@ -71,6 +71,7 @@ type
     dialog: Dialog
     app: App
     scroll: Index2d
+    detach_scroll: bool
     cursors: seq[Cursor]
     jump_stack: seq[int]
     cursor_hook_id: int
@@ -85,22 +86,25 @@ proc is_hidden(path: string): bool =
       return true
   return false
 
-proc index_project(dir: string): seq[string] =
+proc index_files(dir: string): seq[string] =
   for item in walk_dir(dir):
     case item.kind:
       of pcFile: result.add(item.path)
-      of pcDir: result &= index_project(item.path)
+      of pcDir: result &= index_files(item.path)
       else: discard
 
-proc index_project(): seq[FileEntry] =
-  let paths = index_project(get_current_dir())
+proc index_project(dir: string): seq[FileEntry] =
+  let paths = index_files(dir)
   return paths
     .map(path => FileEntry(
       path: path,
-      name: path.relative_path(get_current_dir())
+      name: path.relative_path(dir)
     ))
     .filter(entry => not entry.name.is_hidden())
-    
+
+proc index_project(): seq[FileEntry] =
+  index_project(get_current_dir())
+
 proc load_file(editor: Editor, path: string)
 proc process_key(quick_open: QuickOpen, editor: Editor, key: Key) =
   case key.kind:
@@ -252,15 +256,16 @@ proc make_cursor_hook(editor: Editor): CursorHook =
           if cursor.stop >= start:
             editor.cursors[it].stop += delta
     
-proc update_scroll(editor: Editor, size: Index2d) =
+proc update_scroll(editor: Editor, size: Index2d, detach: bool) =
   let pos = editor.buffer.to_2d(editor.primary_cursor().get_pos())
   
-  while (pos.y - editor.scroll.y) < 4:
-    editor.scroll.y -= 1
-  while (pos.y - editor.scroll.y) >= size.y - 4:
-    editor.scroll.y += 1
-    
-  editor.scroll.y = max(editor.scroll.y, 0)
+  if not detach:
+    while (pos.y - editor.scroll.y) < 4:
+      editor.scroll.y -= 1
+    while (pos.y - editor.scroll.y) >= size.y - 4:
+      editor.scroll.y += 1
+      
+  editor.scroll.y = max(editor.scroll.y, 0).min(editor.buffer.lines.len)
 
 proc jump(editor: Editor, to: int) =
   editor.jump_stack.add(editor.primary_cursor().get_pos())
@@ -375,7 +380,43 @@ proc new_buffer(editor: Editor) =
   editor.cursors = @[Cursor(kind: CursorInsert, pos: 0)]
   editor.autocomplete = make_autocomplete_context(editor.buffer)
 
+proc compute_line_numbers_width(editor: Editor): int
+method process_mouse(editor: Editor, mouse: Mouse) =
+  editor.detach_scroll = true
+  let
+    line_numbers_width = editor.compute_line_numbers_width() + 1    
+    pos = editor.scroll + Index2d(x: mouse.x - line_numbers_width - 1, y: mouse.y - 1)
+  case mouse.kind:
+    of MouseDown:
+      if mouse.button == 1:
+        editor.jump(editor.buffer.to_index(Index2d(
+          x: pos.x.max(0),
+          y: pos.y.min(editor.buffer.lines.len - 1).max(0)
+        )))
+      elif mouse.button == 4:
+        editor.scroll.y -= 1
+      elif mouse.button == 5:
+        editor.scroll.y += 1
+    of MouseUp, MouseMove:
+      if (mouse.kind == MouseUp and mouse.button == 1) or
+         (mouse.kind == MouseMove and mouse.buttons[0]):
+        let stop = editor.buffer.to_index(Index2d(
+          x: pos.x.max(0),
+          y: pos.y.min(editor.buffer.lines.len - 1).max(0)
+        ))
+        case editor.primary_cursor().kind:
+          of CursorInsert:
+            let start = editor.primary_cursor().pos
+            if start != stop:
+              editor.cursors = @[Cursor(kind: CursorSelection, start: start, stop: stop)]
+          of CursorSelection:
+            let start = editor.primary_cursor().start
+            editor.cursors = @[Cursor(kind: CursorSelection, start: start, stop: stop)]
+    else: discard
+
 method process_key(editor: Editor, key: Key) = 
+  if key.kind != KeyUnknown and key.kind != KeyNone:
+    editor.detach_scroll = false
   if key.kind == KeyChar and key.ctrl and key.chr == Rune('e'):
     if editor.dialog.kind != DialogNone:
       editor.dialog = Dialog(kind: DialogNone)
@@ -585,7 +626,7 @@ method render(editor: Editor, box: Box, ren: var TermRenderer) =
     prompt_size = editor.prompt.compute_size()
   
   editor.window_size = box.size
-  editor.update_scroll(box.size - Index2d(x: line_numbers_width + 1, y: prompt_size))
+  editor.update_scroll(box.size - Index2d(x: line_numbers_width + 1, y: prompt_size), editor.detach_scroll)
   
   # Render title
   ren.moveTo(box.min)
@@ -728,4 +769,4 @@ proc make_editor*(app: App): Window =
   make_editor(app, make_buffer())
 
 proc make_editor*(app: App, path: string): Window =
-  make_editor(app, make_buffer(path, app.languages))
+  make_editor(app, app.make_buffer(path))
