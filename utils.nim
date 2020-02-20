@@ -35,6 +35,7 @@ type
 
 proc `+`*(a, b: Index2d): Index2d = Index2d(x: a.x + b.x, y: a.y + b.y)
 proc `-`*(a, b: Index2d): Index2d = Index2d(x: a.x - b.x, y: a.y - b.y)
+proc `*`*(a: Index2d, factor: int): Index2d = Index2d(x: a.x * factor, y: a.y * factor)
 
 proc size*(box: Box): Index2d = box.max - box.min
 proc is_inside*(box: Box, pos: Index2d): bool =

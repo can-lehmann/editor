@@ -67,7 +67,7 @@ const
 
 proc is_int(str: seq[Rune]): bool =
   for it, chr in str:
-    if not (char(chr).is_digit or
+    if not ((chr.int64 >= 0 and chr.int64 <= 127 and char(chr).is_digit) or
             chr == '_' or
             (chr == '+' and it == 0 and str.len > 1) or
             (chr == '-' and it == 0 and str.len > 1)):
@@ -77,7 +77,7 @@ proc is_int(str: seq[Rune]): bool =
 proc is_float(str: seq[Rune]): bool =
   var point = false
   for it, chr in str:
-    if not (char(chr).is_digit or
+    if not ((chr.int64 >= 0 and chr.int64 <= 127 and char(chr).is_digit) or
             chr == '_' or
             (chr == '+' and it == 0 and str.len > 1) or
             (chr == '-' and it == 0 and str.len > 1)):

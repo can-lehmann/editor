@@ -44,7 +44,8 @@ type
     tokens*: seq[Token]
     tokens_done*: bool
     language*: Language
-    cursor_hooks: seq[CursorHook]
+    cursor_hooks: Table[int, CursorHook]
+    returned_ids: seq[int]
     undo_stack: seq[seq[Action]]
     redo_stack: seq[seq[Action]]
     indent_width*: int
@@ -53,14 +54,18 @@ proc len*(buffer: Buffer): int = buffer.text.len
 proc `[]`*(buffer: Buffer, index: int): Rune = buffer.text[index]
 
 proc register_hook*(buffer: Buffer, hook: CursorHook): int =
-  result = buffer.cursor_hooks.len
-  buffer.cursor_hooks.add(hook)
+  if buffer.returned_ids.len == 0:
+    result = buffer.cursor_hooks.len
+  else:
+    result = buffer.returned_ids.pop()
+  buffer.cursor_hooks[result] = hook
 
 proc unregister_hook*(buffer: Buffer, id: int) =
   buffer.cursor_hooks.del(id)
+  buffer.returned_ids.add(id)
 
 proc call_hooks(buffer: Buffer, start, delta: int) =
-  for hook in buffer.cursor_hooks:
+  for id, hook in buffer.cursor_hooks:
     hook(start, delta)
 
 proc update_tokens*(buffer: Buffer) =
@@ -368,9 +373,12 @@ proc redo*(buffer: Buffer) =
   for action in frame:
     case action.kind:
       of ActionInsert: 
-        buffer.insert_no_undo(action.insert_pos, action.insert_text )
+        buffer.insert_no_undo(action.insert_pos, action.insert_text)
       of ActionDelete:
-        buffer.delete_no_undo(action.delete_pos, action.delete_pos + action.delete_text.len)
+        buffer.delete_no_undo(
+          action.delete_pos,
+          action.delete_pos + action.delete_text.len
+        )
 
 proc undo*(buffer: Buffer) =
   if buffer.undo_stack.len == 0:
@@ -383,7 +391,10 @@ proc undo*(buffer: Buffer) =
       of ActionDelete:
         buffer.insert_no_undo(action.delete_pos, action.delete_text)
       of ActionInsert:
-        buffer.delete_no_undo(action.insert_pos, action.insert_pos + action.insert_text.len)
+        buffer.delete_no_undo(
+          action.insert_pos,
+          action.insert_pos + action.insert_text.len
+        )
 
 proc finish_undo_frame*(buffer: Buffer) =
   if buffer.undo_stack.len == 0:
@@ -400,7 +411,7 @@ proc make_buffer*(): Buffer =
     tokens: @[],
     tokens_done: false,
     language: nil,
-    cursor_hooks: @[],
+    cursor_hooks: init_table[int, CursorHook](),
     indent_width: 2
   )
 
@@ -447,7 +458,7 @@ proc make_buffer*(path: string, lang: Language = nil): Buffer =
     tokens: @[],
     tokens_done: false,
     language: lang,
-    cursor_hooks: @[],
+    cursor_hooks: init_table[int, CursorHook](),
     indent_width: text.guess_indent_width()
   )
 
