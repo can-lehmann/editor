@@ -20,12 +20,15 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import terminal, common
+import terminal, common, unicode
 
 export terminal_width, terminal_height, set_style, set_cursor_pos, getch
 
 proc term_write*(chr: char) =
   stdout.write(chr)
+
+proc term_write*(rune: Rune) =
+  stdout.write($rune)
 
 proc term_refresh*() =
   discard
@@ -142,7 +145,7 @@ proc read_escape(): Key =
       
 proc read_key*(): Key =
   let chr = getch()
-  var key = Key(kind: KeyChar, chr: chr)
+  var key = Key(kind: KeyChar, chr: Rune(chr))
   
   if ord(chr) == 127:
     return Key(kind: KeyBackspace)
@@ -155,8 +158,11 @@ proc read_key*(): Key =
   if ord(chr) <= 26:
     return Key(
       kind: KeyChar,
-      chr: char(ord(chr) - 1 + ord('a')),
+      chr: Rune(char(ord(chr) - 1 + ord('a'))),
       ctrl: true
     )
   
-  return Key(kind: KeyChar, chr: chr)
+  return Key(kind: KeyChar, chr: Rune(chr))
+
+proc read_mouse*(): Mouse =
+  discard
