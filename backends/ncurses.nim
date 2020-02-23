@@ -206,30 +206,30 @@ proc read_mouse*(): Mouse =
     return Mouse(kind: MouseMove, x: event.x.int, y: event.y.int, buttons: buttons)
   elif (event.bstate and BUTTON1_PRESSED) != 0:
     buttons[0] = true
-    return Mouse(kind: MouseDown, button: 1, x: event.x.int, y: event.y.int, buttons: buttons)
+    return Mouse(kind: MouseDown, button: 0, x: event.x.int, y: event.y.int, buttons: buttons)
   elif (event.bstate and BUTTON1_RELEASED) != 0:
     buttons[0] = false
-    return Mouse(kind: MouseUp, button: 1, x: event.x.int, y: event.y.int, buttons: buttons)
+    return Mouse(kind: MouseUp, button: 0, x: event.x.int, y: event.y.int, buttons: buttons)
   elif (event.bstate and BUTTON2_PRESSED) != 0:
     buttons[1] = true
-    return Mouse(kind: MouseDown, button: 2, x: event.x.int, y: event.y.int, buttons: buttons)
+    return Mouse(kind: MouseDown, button: 1, x: event.x.int, y: event.y.int, buttons: buttons)
   elif (event.bstate and BUTTON2_RELEASED) != 0:
     buttons[1] = false
-    return Mouse(kind: MouseUp, button: 2, x: event.x.int, y: event.y.int, buttons: buttons)
+    return Mouse(kind: MouseUp, button: 1, x: event.x.int, y: event.y.int, buttons: buttons)
   elif (event.bstate and BUTTON3_PRESSED) != 0:
     buttons[2] = true
-    return Mouse(kind: MouseDown, button: 3, x: event.x.int, y: event.y.int, buttons: buttons)
+    return Mouse(kind: MouseDown, button: 2, x: event.x.int, y: event.y.int, buttons: buttons)
   elif (event.bstate and BUTTON3_RELEASED) != 0:
     buttons[2] = false
-    return Mouse(kind: MouseUp, button: 3, x: event.x.int, y: event.y.int, buttons: buttons)
+    return Mouse(kind: MouseUp, button: 2, x: event.x.int, y: event.y.int, buttons: buttons)
   elif (event.bstate and BUTTON4_PRESSED) != 0:
-    return Mouse(kind: MouseDown, button: 4, x: event.x.int, y: event.y.int, buttons: buttons)
+    return Mouse(kind: MouseScroll, delta: -1, x: event.x.int, y: event.y.int, buttons: buttons)
   elif (event.bstate and BUTTON4_RELEASED) != 0:
-    return Mouse(kind: MouseUp, button: 4, x: event.x.int, y: event.y.int, buttons: buttons)
+    return Mouse(kind: MouseScroll, delta: -1, x: event.x.int, y: event.y.int, buttons: buttons)
   elif (event.bstate and BUTTON5_PRESSED) != 0:
-    return Mouse(kind: MouseDown, button: 5, x: event.x.int, y: event.y.int, buttons: buttons)
+    return Mouse(kind: MouseScroll, delta: 1, x: event.x.int, y: event.y.int, buttons: buttons)
   elif (event.bstate and BUTTON5_RELEASED) != 0:
-    return Mouse(kind: MouseUp, button: 5, x: event.x.int, y: event.y.int, buttons: buttons)
+    return Mouse(kind: MouseScroll, delta: 1, x: event.x.int, y: event.y.int, buttons: buttons)
   
   return Mouse(kind: MouseUnknown, x: event.x.int, y: event.y.int, state: event.bstate.uint16)
   

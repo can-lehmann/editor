@@ -25,6 +25,7 @@ import termdiff, highlight, window_manager
 import editor, keyinfo, calc
 
 setup_term()
+system.add_quit_proc(quit_app)
 
 var
   cur_screen = make_term_screen()
@@ -66,10 +67,9 @@ block:
   app.render(ren)
   cur_screen.show_all()
 
-import times
 while true:
   let key = read_key()
-
+  
   if key.kind == KeyMouse:
     app.process_mouse(read_mouse())
   else:
@@ -85,4 +85,3 @@ while true:
   cur_screen.apply(screen)
   cur_screen = screen
 
-system.add_quit_proc(quit_app)

@@ -22,39 +22,17 @@
 
 import utils, sequtils, strutils, backends/ncurses, backends/common, unicode
 
+export TermScreen, make_term_screen, height, `[]`
 export setup_term, reset_term, read_key, read_mouse, terminal_width, terminal_height
 
 export Color, BaseColor
 export Key, KeyKind, Mouse, MouseKind
 
-proc pos*(mouse: Mouse): Index2d =
-  Index2d(x: mouse.x, y: mouse.y)
-
-type
-  TermScreen* = ref object
-    width*: int
-    data*: seq[CharCell]
-
-proc make_term_screen*(w, h: int): owned TermScreen =
-  let chr = CharCell(
-    chr: Rune(' '),
-    fg: Color(base: ColorDefault),
-    bg: Color(base: ColorDefault)
-  )
-
-  return TermScreen(
-    width: w,
-    data: repeat(chr, w * h)
-  )
-
 proc make_term_screen*(): owned TermScreen =
   make_term_screen(terminal_width(), terminal_height())
 
-proc height*(screen: TermScreen): int =
-  screen.data.len div screen.width
-
-proc `[]`*(screen: TermScreen, x, y: int): CharCell =
-  screen.data[x + y * screen.width]
+proc pos*(mouse: Mouse): Index2d =
+  Index2d(x: mouse.x, y: mouse.y)
 
 proc has_same_style(a, b: CharCell): bool =
   a.fg == b.fg and a.bg == b.bg and a.reverse == b.reverse

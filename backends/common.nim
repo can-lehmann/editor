@@ -20,11 +20,13 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import unicode
+import unicode, sequtils
 
 type 
   BaseColor* = enum
-    ColorBlack = 0, ColorRed, ColorGreen, ColorYellow, ColorBlue, ColorMagenta, ColorCyan, ColorWhite, ColorDefault
+    ColorBlack = 0,
+    ColorRed, ColorGreen, ColorYellow, ColorBlue,
+    ColorMagenta, ColorCyan, ColorWhite, ColorDefault
 
   Color* = object
     base*: BaseColor
@@ -40,6 +42,7 @@ type
     MouseUnknown, MouseNone,
     MouseMove,
     MouseDown, MouseUp,
+    MouseScroll,
     MouseClick, MouseDoubleClick, MouseTripleClick
 
   Mouse* = object
@@ -49,6 +52,8 @@ type
     case kind*: MouseKind:
       of MouseUp, MouseDown, MouseClick, MouseDoubleClick, MouseTripleClick:
         button*: int
+      of MouseScroll:
+        delta*: int
       of MouseUnknown:
         state*: uint64
       else: discard
@@ -67,4 +72,30 @@ type
       of KeyChar: chr*: Rune
       of KeyUnknown: key_code*: int
       else: discard
+
+type
+  TermScreen* = ref object
+    width*: int
+    data*: seq[CharCell]
+
+proc make_term_screen*(w, h: int): owned TermScreen =
+  let chr = CharCell(
+    chr: Rune(' '),
+    fg: Color(base: ColorDefault),
+    bg: Color(base: ColorDefault)
+  )
+
+  return TermScreen(
+    width: w,
+    data: repeat(chr, w * h)
+  )
+
+proc height*(screen: TermScreen): int =
+  screen.data.len div screen.width
+
+proc `[]`*(screen: TermScreen, x, y: int): CharCell =
+  screen.data[x + y * screen.width]
+
+proc `[]=`*(screen: TermScreen, x, y: int, cell: CharCell) =
+  screen.data[x + y * screen.width] = cell
 

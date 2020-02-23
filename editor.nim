@@ -388,17 +388,13 @@ method process_mouse(editor: Editor, mouse: Mouse) =
     pos = editor.scroll + Index2d(x: mouse.x - line_numbers_width - 1, y: mouse.y - 1)
   case mouse.kind:
     of MouseDown:
-      if mouse.button == 1:
+      if mouse.button == 0:
         editor.jump(editor.buffer.to_index(Index2d(
           x: pos.x.max(0),
           y: pos.y.min(editor.buffer.lines.len - 1).max(0)
         )))
-      elif mouse.button == 4:
-        editor.scroll.y -= 1
-      elif mouse.button == 5:
-        editor.scroll.y += 1
     of MouseUp, MouseMove:
-      if (mouse.kind == MouseUp and mouse.button == 1) or
+      if (mouse.kind == MouseUp and mouse.button == 0) or
          (mouse.kind == MouseMove and mouse.buttons[0]):
         let stop = editor.buffer.to_index(Index2d(
           x: pos.x.max(0),
@@ -412,6 +408,8 @@ method process_mouse(editor: Editor, mouse: Mouse) =
           of CursorSelection:
             let start = editor.primary_cursor().start
             editor.cursors = @[Cursor(kind: CursorSelection, start: start, stop: stop)]
+    of MouseScroll:
+      editor.scroll.y += mouse.delta
     else: discard
 
 method process_key(editor: Editor, key: Key) = 

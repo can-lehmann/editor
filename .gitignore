@@ -1,4 +1,7 @@
 main
+main-sdl
 backends/ncurses
+backends/sdl
 todo.md
 main.js
+test.txt
