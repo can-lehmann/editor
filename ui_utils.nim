@@ -21,7 +21,7 @@
 # SOFTWARE.
 
 
-import strutils, deques, unicode, hashes, sets
+import strutils, deques, unicode, hashes, sets, sequtils, sugar
 import utils, termdiff
 
 type
@@ -231,3 +231,74 @@ proc render*(entry: Entry, ren: var TermRenderer) =
       
 proc make_entry*(copy_buffer: CopyBuffer = nil): owned Entry =
   return Entry(text: @[], cursor: Cursor(kind: CursorInsert, pos: 0), copy_buffer: copy_buffer)
+
+proc render_border*(title: string, sidebar_width: int, box: Box, ren: var TermRenderer) =
+  var shown_title = title
+  let padding_len = box.size.x - sidebar_width - 1 - title.len
+  if padding_len < 0:
+    shown_title = shown_title.substr(0, shown_title.len - 1 + padding_len)
+  
+  let
+    after = strutils.repeat(' ', padding_len.max(0))
+    titlebar = strutils.repeat(' ', sidebar_width + 1) & shown_title & after
+    
+  ren.move_to(box.min)
+  ren.put(
+    titlebar,
+    fg=Color(base: ColorBlack),
+    bg=Color(base: ColorWhite)
+  )
+    
+  for y in 1..<box.size.y:
+    ren.move_to(box.min.x, box.min.y + y)
+    ren.put(
+      repeat(' ', sidebar_width),
+      fg=Color(base: ColorBlack),
+      bg=Color(base: ColorWhite)
+    )
+
+type
+  List* = object
+    items*: seq[seq[Rune]]
+    selected*: int
+    view*: int
+
+proc make_list*(items: seq[seq[Rune]]): List =
+  List(items: items, view: 0, selected: 0)
+
+proc make_list*(items: seq[string]): List =
+  make_list(items.map(to_runes))
+
+proc process_key*(list: var List, key: Key) =
+  case key.kind:
+    of KeyArrowUp:
+      list.selected -= 1
+      if list.selected < 0:
+        list.selected = 0
+    of KeyArrowDown:
+      list.selected += 1
+      if list.selected >= list.items.len:
+        list.selected = list.items.len - 1
+    else: discard
+
+proc scroll(list: var List, height: int) =
+  while list.selected - list.view >= height - 3:
+    list.view += 1
+  
+  while list.selected - list.view < 3:
+    list.view -= 1
+
+  if list.view < 0:
+    list.view = 0
+
+proc render*(list: var List, box: Box, ren: var TermRenderer) =
+  let prev_clip = ren.clip_area
+  ren.clip(box)
+  
+  list.scroll(box.size.y)
+  for it, item in list.items:
+    ren.move_to(box.min.x, box.min.y + it - list.view)
+    ren.put(item, reverse=it == list.selected)
+    
+  ren.clip(prev_clip)
+

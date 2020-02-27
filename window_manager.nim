@@ -63,7 +63,7 @@ method close*(window: Window) {.base.} = discard
 proc make_launcher(app: App): Window =
   return Launcher(app: app, selected: 0)
 
-proc open_window(pane: Pane, window: Window)
+proc open_window*(pane: Pane, window: Window)
 
 method process_key(launcher: Launcher, key: Key) =
   case key.kind:
@@ -210,7 +210,7 @@ proc split*(pane: Pane, dir: Direction, app: App) =
       else:
         pane.pane_a.split(dir, app)
 
-proc open_window(pane: Pane, window: Window) =
+proc open_window*(pane: Pane, window: Window) =
   case pane.kind:
     of PaneWindow:
       pane.window = window

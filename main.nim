@@ -22,7 +22,7 @@
 
 import unicode, tables, os
 import termdiff, highlight, window_manager
-import editor, keyinfo, calc
+import editor, keyinfo, calc, file_manager
 
 setup_term()
 system.add_quit_proc(quit_app)
@@ -48,6 +48,7 @@ var
   ]
   window_constructors = @[
     make_window_constructor("Editor", make_editor),
+    make_window_constructor("File Manager", make_file_manager), 
     make_window_constructor("Calc", make_calc),
     make_window_constructor("Keyinfo", make_keyinfo)
   ]
