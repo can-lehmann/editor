@@ -43,6 +43,8 @@ proc has_same_style(a, b: CharCell): bool =
   a.fg == b.fg and a.bg == b.bg and a.reverse == b.reverse
 
 proc show_all*(screen: TermScreen) =
+  if screen.width == 0 or screen.height == 0:
+    return
   var cur_style = screen.data[0]
   cur_style.apply_style()
   for y in 0..<screen.height:
@@ -56,6 +58,9 @@ proc show_all*(screen: TermScreen) =
 proc apply*(prev, cur: TermScreen) =
   if prev.width != cur.width or prev.data.len != cur.data.len:
     cur.show_all()
+    return
+
+  if cur.width == 0 or cur.height == 0:
     return
       
   var

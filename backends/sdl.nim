@@ -48,6 +48,7 @@ type
     default_bg: colors.Color
 
     font: FontPtr
+    font_size: int
     runes: Table[colors.Color, Table[Rune, Texture]]
     cell_size: Index2d
 
@@ -121,6 +122,39 @@ proc draw_rune(term: Terminal, rune: Rune, color: colors.Color, x, y: int) =
   to_rect.h = tex.h.cint
   term.ren.copy(tex.tex, nil, to_rect.addr)
 
+proc add_modifiers(key: Key, term: Terminal): Key =
+  result = key
+  result.ctrl = term.mod_ctrl
+  result.alt = term.mod_alt
+  result.shift = term.mod_shift
+
+proc recompute_screen_size(term: Terminal) =
+  var
+    w: cint = 0
+    h: cint = 0
+  term.window.get_size(w, h)
+  let
+    x = max(w div term.cell_size.x, 1)
+    y = max(h div term.cell_size.y, 1)
+  if x != term.screen.width or y != term.screen.height:  
+    term.screen = make_term_screen(x, y)
+    if term.key_queue.len == 0:
+      term.key_queue.add_last(Key(kind: KeyUnknown).add_modifiers(term))
+
+proc set_font_size(term: Terminal, font_size: int) =
+  let font = open_font("assets/font.ttf", font_size.cint)
+  if font == nil:
+    return
+  term.font = font
+  term.font_size = font_size
+  term.runes = init_table[colors.Color, Table[Rune, Texture]]()
+  term.prerender_rune(Rune('a'), term.default_fg)
+  term.cell_size = Index2d(
+    x: term.runes[term.default_fg][Rune('a')].w,
+    y: term.runes[term.default_fg][Rune('a')].h
+  )
+  term.recompute_screen_size()
+
 proc redraw(term: Terminal) =
   let
     current_time = now()
@@ -162,13 +196,6 @@ proc redraw(term: Terminal) =
       
   
   term.ren.present()
-
-proc add_modifiers(key: Key, term: Terminal): Key =
-  result = key
-  result.ctrl = term.mod_ctrl
-  result.alt = term.mod_alt
-  result.shift = term.mod_shift
-
 
 proc update(term: Terminal): bool =
   term.redraw()
@@ -222,9 +249,30 @@ proc update(term: Terminal): bool =
             term.key_queue.add_last(key)
           else:
             if term.mod_ctrl or term.mod_alt:
-              term.key_queue.add_last(Key(kind: KeyChar,
-                chr: Rune(event.keysym.sym),
-              ).add_modifiers(term))
+              var handled = false
+              if term.mod_ctrl:
+                case Rune(event.keysym.sym):
+                  of '+':
+                    term.set_font_size(term.font_size + 1)
+                    handled = true
+                  of '-':
+                    term.set_font_size(max(term.font_size - 1, 1))
+                    handled = true
+                  of '0':
+                    term.set_font_size(12)
+                    handled = true
+                  of 'v':
+                    if term.mod_shift:
+                      let text = get_clipboard_text()
+                      term.key_queue.add_last(Key(kind: KeyPaste,
+                        text: ($text).to_runes(),
+                      ).add_modifiers(term))
+                      handled = true
+                  else: discard
+              if not handled:
+                term.key_queue.add_last(Key(kind: KeyChar,
+                  chr: Rune(event.keysym.sym),
+                ).add_modifiers(term))
       of KeyUp:
         let event = cast[KeyboardEventPtr](evt.addr)
         case event.keysym.scancode:
@@ -241,19 +289,11 @@ proc update(term: Terminal): bool =
         while event.text[len] != '\0':
           len += 1
         let runes = event.text[0..<len].join("").to_runes()
-        for rune in runes:
-          term.key_queue.add_last(Key(kind: KeyChar, chr: rune).add_modifiers(term))
+        if not term.mod_ctrl and not term.mod_alt:
+          for rune in runes:
+            term.key_queue.add_last(Key(kind: KeyChar, chr: rune).add_modifiers(term))
       of WindowEvent:
-        var
-          w: cint = 0
-          h: cint = 0
-        term.window.get_size(w, h)
-        let
-          x = w div term.cell_size.x
-          y = h div term.cell_size.y
-        if x != term.screen.width or y != term.screen.height:
-          term.screen = make_term_screen(x, y)
-          term.key_queue.add_last(Key(kind: KeyUnknown).add_modifiers(term))
+        term.recompute_screen_size()
       of MouseButtonDown, MouseButtonUp:
         let
           event = cast[MouseButtonEventPtr](evt.addr)
@@ -352,6 +392,7 @@ proc make_terminal(): Terminal =
     window: window,
     ren: ren,
     font: font,
+    font_size: 12,
     screen: make_term_screen(80, 25),
     default_fg: rgb(255, 255, 255),
     default_bg: rgb(0, 0, 0),

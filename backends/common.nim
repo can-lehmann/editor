@@ -62,7 +62,8 @@ type
     KeyNone, KeyUnknown, KeyMouse,
     KeyChar, KeyReturn, KeyBackspace, KeyDelete, KeyEscape,
     KeyArrowLeft, KeyArrowRight, KeyArrowDown, KeyArrowUp,
-    KeyHome, KeyEnd, KeyPageUp, KeyPageDown
+    KeyHome, KeyEnd, KeyPageUp, KeyPageDown,
+    KeyPaste
 
   Key* = object
     shift*: bool
@@ -71,6 +72,7 @@ type
     case kind*: KeyKind:
       of KeyChar: chr*: Rune
       of KeyUnknown: key_code*: int
+      of KeyPaste: text*: seq[Rune]
       else: discard
 
 type
@@ -91,7 +93,9 @@ proc make_term_screen*(w, h: int): owned TermScreen =
   )
 
 proc height*(screen: TermScreen): int =
-  screen.data.len div screen.width
+  if screen.width == 0:
+    return 0
+  return screen.data.len div screen.width
 
 proc `[]`*(screen: TermScreen, x, y: int): CharCell =
   screen.data[x + y * screen.width]

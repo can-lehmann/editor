@@ -514,7 +514,7 @@ method process_key(editor: Editor, key: Key) =
       for it, cursor in editor.cursors:
         var index = editor.buffer.to_2d(cursor.get_pos())
         index.x = 0
-        editor.cursors[it] = Cursor(kind: CursorInsert, pos: editor.buffer.to_index(index))
+        editor.update_cursor(it, editor.buffer.to_index(index), key.shift)
     of KeyEnd:
       for it, cursor in editor.cursors:
         var index = editor.buffer.to_2d(cursor.get_pos())
@@ -525,7 +525,8 @@ method process_key(editor: Editor, key: Key) =
         index.y += 1
         index.y = min(index.y, editor.buffer.lines.len - 1)
         index.x = 0
-        editor.cursors[it] = Cursor(kind: CursorInsert, pos: (editor.buffer.to_index(index) - 1).max(0))
+        let pos = (editor.buffer.to_index(index) - 1).max(0)
+        editor.update_cursor(it, pos, key.shift)
     of KeyBackspace:
       for it, cursor in editor.cursors:
         case cursor.kind
@@ -548,6 +549,8 @@ method process_key(editor: Editor, key: Key) =
     of KeyEscape:
       var cur = editor.primary_cursor()
       editor.cursors = @[cur]
+    of KeyPaste:
+      editor.insert(key.text)
     of KeyChar:
       if key.ctrl:
         case key.chr:
@@ -649,7 +652,7 @@ method render(editor: Editor, box: Box, ren: var TermRenderer) =
   ren.moveTo(box.min)
   let
     title = editor.buffer.display_file_name()
-    title_aligned = strutils.align_left(title, box.size.x - 1 - line_numbers_width)
+    title_aligned = strutils.align_left(title, (box.size.x - 1 - line_numbers_width).max(0))
     title_output = repeat(' ', line_numbers_width + 1) & title_aligned
   ren.put(
     title_output,
@@ -746,7 +749,7 @@ method render(editor: Editor, box: Box, ren: var TermRenderer) =
       for it, line in editor.prompt.lines:
         ren.move_to(box.min.x, box.min.y + box.size.y - prompt_size + it)
         ren.put(
-          strutils.repeat(' ', line_numbers_width + 1) & strutils.align_left(line, box.size.x - line_numbers_width - 1),
+          strutils.repeat(' ', line_numbers_width + 1) & strutils.align_left(line, max(box.size.x - line_numbers_width - 1, 0)),
           fg=Color(base: ColorBlack, bright: false),
           bg=Color(base: ColorWhite, bright: true)
         )
