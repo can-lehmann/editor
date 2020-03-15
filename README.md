@@ -9,6 +9,18 @@ A simple text editor written in Nim.
 - Syntax Highlighting
 - Multiple Windows
 
+## Installation
+### ncurses Backend
+```bash
+nim compile -r --opt:speed main.nim
+```
+  
+### SDL2 Backend
+Note: Requires https://github.com/nim-lang/sdl2
+```bash
+nim compile -r -o:main-sdl --opt:speed -d:sdl_backend main.nim
+```
+
 ## Keyboard Bindings
 ### Window Management
 - `Ctrl + P N Left/Right/Up/Down`: Create new window
