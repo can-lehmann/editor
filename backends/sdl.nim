@@ -127,7 +127,7 @@ proc redraw(term: Terminal) =
     dtime = (current_time - term.ptime).in_microseconds.int / 1_000_000
     fps = 1 / dtime
   term.ptime = current_time
-
+  
   term.ren.set_draw_color(0, 0, 0, 255)
   term.ren.clear()
   
@@ -148,6 +148,8 @@ proc redraw(term: Terminal) =
   for x in 0..<term.screen.width:
     for y in 0..<term.screen.height:
       let cell = term.screen[x, y]
+      if cell.chr == ' ':
+        continue
       var fg = term.fg_color(cell.fg)
       if cell.reverse:
         fg = term.bg_color(cell.bg)
@@ -207,6 +209,13 @@ proc update(term: Terminal): bool =
             term.key_queue.add_last(Key(kind: KeyHome).add_modifiers(term))
           of SDL_SCANCODE_END:
             term.key_queue.add_last(Key(kind: KeyEnd).add_modifiers(term))
+          of SDL_SCANCODE_TAB:
+            var key = Key(kind: KeyChar, chr: 'i')
+            if term.mod_shift:
+              key = Key(kind: KeyChar, chr: 'I')
+            key = key.add_modifiers(term) 
+            key.ctrl = true
+            term.key_queue.add_last(key)
           else:
             if term.mod_ctrl or term.mod_alt:
               term.key_queue.add_last(Key(kind: KeyChar,
@@ -330,7 +339,7 @@ proc make_terminal(): Terminal =
   let
     window = create_window("Editor", 100, 100, 640, 480, SDL_WINDOW_RESIZABLE)
     ren = window.create_renderer(-1, Renderer_PresentVSync)
-    font = open_font("", 12)
+    font = open_font("assets/font.ttf", 12)
 
   if font == nil:
     quit "Could not open font"

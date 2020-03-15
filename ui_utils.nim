@@ -35,6 +35,8 @@ proc copy*(buffer: CopyBuffer, str: seq[Rune]) =
   buffer.history.add_last(str)
 
 proc paste*(buffer: CopyBuffer): seq[Rune] =
+  if buffer.history.len == 0:
+    return @[]
   return buffer.history[buffer.history.len - 1]
 
 type
@@ -231,6 +233,9 @@ proc render*(entry: Entry, ren: var TermRenderer) =
       
 proc make_entry*(copy_buffer: CopyBuffer = nil): owned Entry =
   return Entry(text: @[], cursor: Cursor(kind: CursorInsert, pos: 0), copy_buffer: copy_buffer)
+
+proc make_entry*(text: seq[Rune], copy_buffer: CopyBuffer = nil): owned Entry =
+  return Entry(text: text, cursor: Cursor(kind: CursorInsert, pos: 0), copy_buffer: copy_buffer)
 
 proc render_border*(title: string, sidebar_width: int, box: Box, ren: var TermRenderer) =
   var shown_title = title

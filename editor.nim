@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import sequtils, strutils, os, sugar, streams, deques, unicode, sets, hashes, tables
+import sequtils, strutils, os, sugar, streams, deques, unicode, sets, hashes, tables, algorithm
 import utils, ui_utils, termdiff, highlight, buffer, window_manager, autocomplete
 
 # Types
@@ -54,7 +54,7 @@ type
     entry: Entry
     files: seq[FileEntry]
     shown_files: seq[FileEntry]
-    selected: int
+    list: List
   
   # Dialog
   DialogKind = enum DialogNone, DialogQuickOpen
@@ -79,9 +79,11 @@ type
     autocomplete: AutocompleteContext
  
 # Dialog / QuickOpen
+proc `<`(a, b: FileEntry): bool = a.name < b.name
+
 proc is_hidden(path: string): bool =
   let dirs = path.split("/")
-  for dir in dirs:
+  for dir in dirs[0 ..< ^1]:
     if dir.startswith("."):
       return true
   return false
@@ -101,30 +103,37 @@ proc index_project(dir: string): seq[FileEntry] =
       name: path.relative_path(dir)
     ))
     .filter(entry => not entry.name.is_hidden())
+    .sorted()
+
+proc display_name(entry: FileEntry): string =
+  result = entry.name
+  if entry.changed:
+    result &= "*"
 
 proc index_project(): seq[FileEntry] =
   index_project(get_current_dir())
+
+proc update_list(quick_open: QuickOpen) =
+  quick_open.shown_files = quick_open.files
+    .filter(entry => ($quick_open.entry.text).to_lower() in entry.name.to_lower())
+  quick_open.list.items = quick_open.shown_files
+    .map(entry => entry.display_name().to_runes())
+  quick_open.list.selected = quick_open.list.selected.max(0).min(quick_open.list.items.len - 1)
 
 proc load_file(editor: Editor, path: string)
 proc process_key(quick_open: QuickOpen, editor: Editor, key: Key) =
   case key.kind:
     of KeyReturn:
-      if quick_open.selected < quick_open.shown_files.len:
-        let path = quick_open.shown_files[quick_open.selected].path 
+      if quick_open.list.selected < quick_open.shown_files.len and
+         quick_open.list.selected >= 0:
+        let path = quick_open.shown_files[quick_open.list.selected].path 
         editor.load_file(path)
         editor.dialog = Dialog(kind: DialogNone)
-    of KeyArrowDown:
-      quick_open.selected += 1
-      if quick_open.selected >= quick_open.shown_files.len:
-        quick_open.selected = quick_open.shown_files.len - 1
-    of KeyArrowUp:
-      quick_open.selected -= 1
-      if quick_open.selected < 0:
-        quick_open.selected = 0
+    of KeyArrowDown, KeyArrowUp:
+      quick_open.list.process_key(key)
     else:
       quick_open.entry.process_key(key)
-      quick_open.shown_files = quick_open.files.filter(file => file.name.contains($quick_open.entry.text))
-      quick_open.selected = quick_open.selected.min(quick_open.shown_files.len - 1).max(0)
+      quick_open.update_list()
 
 proc render(quick_open: QuickOpen, box: Box, ren: var TermRenderer) =
   ren.move_to(box.min.x, box.min.y)
@@ -137,22 +146,30 @@ proc render(quick_open: QuickOpen, box: Box, ren: var TermRenderer) =
   ren.put(" ")
   quick_open.entry.render(ren)
 
-  var it = 0
   for y in 2..<box.size.y:
     ren.move_to(box.min.x, y + box.min.y)
     ren.put(repeat(" ", label.len), fg=Color(base: ColorBlack), bg=Color(base: ColorWhite, bright: true))
     ren.put(" ")
-    if it < quick_open.shown_files.len:
-      var name = quick_open.shown_files[it].name
-      if quick_open.shown_files[it].changed:
-        name &= "*"
-      ren.put(name, reverse=(quick_open.selected == it))
-    it += 1
+
+  quick_open.list.render(Box(
+    min: box.min + Index2d(x: label.len + 1, y: 2),
+    max: box.max
+  ), ren)
 
 proc make_quick_open(app: App): owned QuickOpen =
   let files = index_project()
-    .map(entry => FileEntry(path: entry.path, name: entry.name, changed: app.is_changed(entry.path)))
-  return QuickOpen(entry: make_entry(app.copy_buffer), files: files, shown_files: files, selected: 0)
+    .map(entry => FileEntry(
+      path: entry.path,
+      name: entry.name,
+      changed: app.is_changed(entry.path)
+    ))
+  
+  return QuickOpen(
+    entry: make_entry(app.copy_buffer),
+    files: files,
+    shown_files: files,
+    list: make_list(files.map(entry => entry.display_name()))
+  )
 
 # Dialog
 proc process_key(dialog: Dialog, editor: Editor, key: Key) =
@@ -450,7 +467,7 @@ method process_key(editor: Editor, key: Key) =
           delta = (editor.buffer.skip(cursor.get_pos(), 1)) - cursor.get_pos()
         update(editor.cursors[it], delta, editor.buffer.len, key.shift)
     of KeyArrowUp:
-      if key.alt:
+      if key.alt and key.shift:
         var index = editor.buffer.to_2d(editor.primary_cursor().get_pos())
         index.y -= 1
         index.y = max(index.y, 0) 
@@ -462,7 +479,7 @@ method process_key(editor: Editor, key: Key) =
           index.y = max(index.y, 0)
           editor.update_cursor(it, editor.buffer.to_index(index), key.shift)
     of KeyArrowDown:
-      if key.alt:
+      if key.alt and key.shift:
         var index = editor.buffer.to_2d(editor.primary_cursor().get_pos())
         index.y += 1
         index.y = min(index.y, editor.buffer.lines.len - 1) 

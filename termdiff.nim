@@ -20,7 +20,12 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import utils, sequtils, strutils, backends/ncurses, backends/common, unicode
+import utils, sequtils, strutils, backends/common, unicode
+
+when defined(sdl_backend):
+  import backends/sdl
+else:
+  import backends/ncurses
 
 export TermScreen, make_term_screen, height, `[]`
 export setup_term, reset_term, read_key, read_mouse, terminal_width, terminal_height
