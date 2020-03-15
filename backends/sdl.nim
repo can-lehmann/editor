@@ -171,8 +171,12 @@ proc add_modifiers(key: Key, term: Terminal): Key =
 
 
 proc update(term: Terminal): bool =
+  term.redraw()
+  
   var evt = sdl2.default_event
-  while poll_event(evt):
+  if not wait_event_timeout(evt, 1000):
+    return
+  while true:
     case evt.kind:
       of QuitEvent:
         return true
@@ -301,8 +305,8 @@ proc update(term: Terminal): bool =
             buttons: term.mouse_buttons, delta: -event.y
           ))
       else: discard
-
-  term.redraw()
+    if not poll_event(evt):
+      return
 
 proc destroy(term: Terminal) =
   term.ren.destroy()
