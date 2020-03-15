@@ -63,7 +63,7 @@ type
     KeyChar, KeyReturn, KeyBackspace, KeyDelete, KeyEscape,
     KeyArrowLeft, KeyArrowRight, KeyArrowDown, KeyArrowUp,
     KeyHome, KeyEnd, KeyPageUp, KeyPageDown,
-    KeyPaste
+    KeyPaste, KeyQuit
 
   Key* = object
     shift*: bool

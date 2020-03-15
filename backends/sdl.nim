@@ -39,6 +39,7 @@ type
   Terminal = ref object
     window: WindowPtr
     ren: RendererPtr
+    is_fullscreen: bool
     
     cursor: Cursor
     screen: TermScreen
@@ -206,6 +207,7 @@ proc update(term: Terminal): bool =
   while true:
     case evt.kind:
       of QuitEvent:
+        term.key_queue.add_last(Key(kind: KeyQuit).add_modifiers(term))
         return true
       of KeyDown:
         let event = cast[KeyboardEventPtr](evt.addr)
@@ -247,6 +249,17 @@ proc update(term: Terminal): bool =
             key = key.add_modifiers(term) 
             key.ctrl = true
             term.key_queue.add_last(key)
+          of SDL_SCANCODE_F11:
+            term.is_fullscreen = not term.is_fullscreen
+            if term.is_fullscreen:
+              let display = term.window.get_display_index()
+              var dm: DisplayMode
+              discard get_current_display_mode(display, dm)
+              term.window.set_size(dm.w, dm.h)
+              discard term.window.set_fullscreen(SDL_WINDOW_FULLSCREEN)
+            else:
+              discard term.window.set_fullscreen(0)
+            term.recompute_screen_size()
           else:
             if term.mod_ctrl or term.mod_alt:
               var handled = false
@@ -381,7 +394,8 @@ proc move_to(term: Terminal, x, y: int) =
 
 proc make_terminal(): Terminal =
   let
-    window = create_window("Editor", 100, 100, 640, 480, SDL_WINDOW_RESIZABLE)
+    window = create_window("Editor", 100, 100, 640, 480, SDL_WINDOW_RESIZABLE or
+                                                         SDL_WINDOW_SHOWN)
     ren = window.create_renderer(-1, Renderer_PresentVSync)
     font = open_font("assets/font.ttf", 12)
 
@@ -397,13 +411,13 @@ proc make_terminal(): Terminal =
     default_fg: rgb(255, 255, 255),
     default_bg: rgb(0, 0, 0),
     colors: @[
-      rgb(0, 0, 0),
-      rgb(255, 0, 0),
-      rgb(0, 255, 0),
-      rgb(255, 255, 0),
-      rgb(0, 0, 255),
-      rgb(255, 0, 255),
-      rgb(0, 255, 255),
+      rgb(70, 70, 70),
+      rgb(255, 7, 75),
+      rgb(86, 221, 28),
+      rgb(247, 243, 0),
+      rgb(18, 87, 234),
+      rgb(234, 19, 169),
+      rgb(14, 187, 244),
       rgb(255, 255, 255)
     ],
     cursor: Cursor(

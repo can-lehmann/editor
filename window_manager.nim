@@ -363,6 +363,8 @@ proc process_key*(app: App, key: Key): bool =
       return
     of AppModeNone:
       case key.kind:
+        of KeyQuit:
+          return true
         of KeyChar:
           if key.ctrl:
             case key.chr:

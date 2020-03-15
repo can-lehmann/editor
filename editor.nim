@@ -467,6 +467,8 @@ method process_key(editor: Editor, key: Key) =
           delta = (editor.buffer.skip(cursor.get_pos(), 1)) - cursor.get_pos()
         update(editor.cursors[it], delta, editor.buffer.len, key.shift)
     of KeyArrowUp:
+      if key.ctrl and key.alt:
+        return
       if key.alt and key.shift:
         var index = editor.buffer.to_2d(editor.primary_cursor().get_pos())
         index.y -= 1
@@ -479,6 +481,8 @@ method process_key(editor: Editor, key: Key) =
           index.y = max(index.y, 0)
           editor.update_cursor(it, editor.buffer.to_index(index), key.shift)
     of KeyArrowDown:
+      if key.ctrl and key.alt:
+        return
       if key.alt and key.shift:
         var index = editor.buffer.to_2d(editor.primary_cursor().get_pos())
         index.y += 1
