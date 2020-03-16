@@ -243,12 +243,13 @@ proc update(term: Terminal): bool =
           of SDL_SCANCODE_END:
             term.key_queue.add_last(Key(kind: KeyEnd).add_modifiers(term))
           of SDL_SCANCODE_TAB:
-            var key = Key(kind: KeyChar, chr: 'i')
-            if term.mod_shift:
-              key = Key(kind: KeyChar, chr: 'I')
-            key = key.add_modifiers(term) 
-            key.ctrl = true
-            term.key_queue.add_last(key)
+            if not term.mod_alt:
+              var key = Key(kind: KeyChar, chr: 'i')
+              if term.mod_shift:
+                key = Key(kind: KeyChar, chr: 'I')
+              key = key.add_modifiers(term) 
+              key.ctrl = true
+              term.key_queue.add_last(key)
           of SDL_SCANCODE_F11:
             term.is_fullscreen = not term.is_fullscreen
             if term.is_fullscreen:

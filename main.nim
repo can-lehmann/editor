@@ -56,10 +56,14 @@ var
   root_pane = Pane(kind: PaneWindow, window: app.make_editor())
 
 if param_count() > 0:
-  root_pane = Pane(kind: PaneWindow, window: app.make_editor(param_str(1).absolute_path(get_current_dir())))
+  root_pane = Pane(kind: PaneWindow,
+    window: app.make_editor(param_str(1).absolute_path(get_current_dir()))
+  )
   for it in 2..param_count():
-    var pane = Pane(kind: PaneWindow, window: app.make_editor(param_str(it).absolute_path(get_current_dir())))
-    root_pane = Pane(kind: PaneSplitH, pane_a: root_pane, pane_b: pane)
+    var pane = Pane(kind: PaneWindow,
+      window: app.make_editor(param_str(it).absolute_path(get_current_dir()))
+    )
+    root_pane = Pane(kind: PaneSplitH, factor: (it - 1) / it, pane_a: root_pane, pane_b: pane)
 
 app.root_pane = root_pane
 

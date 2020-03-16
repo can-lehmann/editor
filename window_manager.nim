@@ -30,8 +30,10 @@ type
   PaneObj* = object
    case kind*: PaneKind:
     of PaneWindow:
+      is_dragging*: bool
       window*: Window
     of PaneSplitH, PaneSplitV:
+      factor*: float64
       pane_a*: Pane
       pane_b*: Pane
       selected*: bool
@@ -55,7 +57,7 @@ type
     buffers*: Table[string, Buffer]
 
 method process_key*(window: Window, key: Key) {.base.} = quit "Not implemented"
-method process_mouse*(window: Window, mouse: Mouse) {.base.} = discard
+method process_mouse*(window: Window, mouse: Mouse): bool {.base.} = discard
 method render*(window: Window, box: Box, ren: var TermRenderer) {.base.} = quit "Not implemented"
 method close*(window: Window) {.base.} = discard
 
@@ -193,6 +195,7 @@ proc split*(pane: Pane, dir: Direction, app: App) =
         of DirUp, DirDown:
           pane[] = PaneObj(
             kind: PaneSplitV,
+            factor: 0.5,
             pane_a: Pane(kind: PaneWindow, window: if dir == DirUp: app.make_window() else: pane.window),
             pane_b: Pane(kind: PaneWindow, window: if dir == DirDown: app.make_window() else: pane.window),
             selected: dir == DirDown
@@ -200,6 +203,7 @@ proc split*(pane: Pane, dir: Direction, app: App) =
         of DirLeft, DirRight:
           pane[] = PaneObj(
             kind: PaneSplitH,
+            factor: 0.5,
             pane_a: Pane(kind: PaneWindow, window: if dir == DirLeft: app.make_window() else: pane.window),
             pane_b: Pane(kind: PaneWindow, window: if dir == DirRight: app.make_window() else: pane.window),
             selected: dir == DirRight
@@ -223,47 +227,78 @@ proc open_window*(pane: Pane, window: Window) =
 proc open_launcher(app: App) =
   app.root_pane.open_window(app.make_launcher())
  
-proc process_mouse*(pane: Pane, mouse: Mouse, box: Box) =
+proc process_mouse*(pane: Pane, mouse: Mouse, box: Box): (int, int) =
   case pane.kind:
     of PaneWindow:
-      var mouse_rel = mouse
-      mouse_rel.x -= box.min.x
-      mouse_rel.y -= box.min.y
-      pane.window.process_mouse(mouse_rel)
+      if pane.is_dragging:
+        if mouse.kind == MouseUp:
+          pane.is_dragging = false
+        return (0, 0)
+      else:
+        var mouse_rel = mouse
+        mouse_rel.x -= box.min.x
+        mouse_rel.y -= box.min.y
+        if pane.window.process_mouse(mouse_rel) and mouse.kind == MouseDown:
+          pane.is_dragging = true
+        return (-1, -1)
     of PaneSplitH:
       let
-        split = box.size.x div 2 + box.min.x
+        split = int(float64(box.size.x) * pane.factor) + box.min.x
         right = Box(min: Index2d(x: split, y: box.min.y), max: box.max)
         left = Box(min: box.min, max: Index2d(x: split, y: box.max.y))
-      if mouse.kind == MouseUnknown or mouse.kind == MouseNone or mouse.kind == MouseMove:
-        if pane.selected:
-          pane.pane_b.process_mouse(mouse, right)
-        else:
-          pane.pane_a.process_mouse(mouse, left)
-      else:
+      var res = (-1, -1)
+      if mouse.kind == MouseDown or mouse.kind == MouseScroll:
         if left.is_inside(mouse.pos):
-          pane.selected = false
-          pane.pane_a.process_mouse(mouse, left)
+          if mouse.kind == MouseDown:
+            pane.selected = false
+          res = pane.pane_a.process_mouse(mouse, left)
         else:
-          pane.selected = true
-          pane.pane_b.process_mouse(mouse, right)
+          if mouse.kind == MouseDown:
+            pane.selected = true
+          res = pane.pane_b.process_mouse(mouse, right)
+          if res[0] != -1:
+            res[0] += 1
+      else:
+        if pane.selected:
+          res = pane.pane_b.process_mouse(mouse, right)
+          if res[0] != -1:
+            res[0] += 1
+        else:
+          res = pane.pane_a.process_mouse(mouse, left)
+      if res[0] == 1:
+        pane.factor = (mouse.x - box.min.x) / box.size.x
+        pane.factor = pane.factor.max(0).min(1)
+        return (-1, res[1])
+      return res
     of PaneSplitV:
       let
-        split = box.size.y div 2 + box.min.y
+        split = int(float64(box.size.y) * pane.factor) + box.min.y
         bottom = Box(min: Index2d(x: box.min.x, y: split), max: box.max)
         top = Box(min: box.min, max: Index2d(x: box.max.x, y: split))
-      if mouse.kind == MouseUnknown or mouse.kind == MouseNone or mouse.kind == MouseMove:
-        if pane.selected:
-          pane.pane_b.process_mouse(mouse, bottom)
-        else:
-          pane.pane_a.process_mouse(mouse, top)
-      else:
+      var res = (-1, -1)
+      if mouse.kind == MouseDown or mouse.kind == MouseScroll:
         if top.is_inside(mouse.pos):
-          pane.selected = false
-          pane.pane_a.process_mouse(mouse, top)
+          if mouse.kind == MouseDown:
+            pane.selected = false
+          res = pane.pane_a.process_mouse(mouse, top)
         else:
-          pane.selected = true
-          pane.pane_b.process_mouse(mouse, bottom)
+          if mouse.kind == MouseDown:
+            pane.selected = true
+          res = pane.pane_b.process_mouse(mouse, bottom)
+          if res[1] != -1:
+            res[1] += 1
+      else:
+        if pane.selected:
+          res = pane.pane_b.process_mouse(mouse, bottom)
+          if res[1] != -1:
+            res[1] += 1
+        else:
+          res = pane.pane_a.process_mouse(mouse, top)
+      if res[1] == 1:
+        pane.factor = (mouse.y - box.min.y) / box.size.y
+        pane.factor = pane.factor.max(0).min(1)
+        return (res[0], -1)
+      return res
 
 proc process_key*(pane: Pane, key: Key) =
   case pane.kind:
@@ -281,11 +316,11 @@ proc render*(pane: Pane, box: Box, ren: var TermRenderer) =
       ren.clip(box)
       pane.window.render(box, ren)
     of PaneSplitH:
-      let split = box.size.x div 2 + box.min.x
+      let split = int(float64(box.size.x) * pane.factor) + box.min.x
       pane.pane_a.render(Box(min: box.min, max: Index2d(x: split, y: box.max.y)), ren)
       pane.pane_b.render(Box(min: Index2d(x: split, y: box.min.y), max: box.max), ren)
     of PaneSplitV:
-      let split = box.size.y div 2 + box.min.y
+      let split = int(float64(box.size.y) * pane.factor) + box.min.y
       pane.pane_a.render(Box(min: box.min, max: Index2d(x: box.max.x, y: split)), ren)
       pane.pane_b.render(Box(min: Index2d(x: box.min.x, y: split), max: box.max), ren)
 
@@ -322,7 +357,7 @@ proc list_changed*(app: App): seq[string] =
       result.add(path)
 
 proc process_mouse*(app: App, mouse: Mouse) =
-  app.root_pane.process_mouse(mouse, Box(
+  discard app.root_pane.process_mouse(mouse, Box(
     min: Index2d(x: 0, y: 0),
     max: Index2d(x: terminal_width(), y: terminal_height())
   ))

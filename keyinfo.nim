@@ -40,7 +40,9 @@ method process_key*(key_info: KeyInfo, key: Key) =
   if key.kind != KeyNone:
     key_info.events.add(Event(kind: EventKey, key: key))
 
-method process_mouse*(key_info: KeyInfo, mouse: Mouse) =
+method process_mouse*(key_info: KeyInfo, mouse: Mouse): bool =
+  if mouse.x == 0 and mouse.y == 0:
+    return true
   key_info.events.add(Event(kind: EventMouse, mouse: mouse))
 
 method render*(key_info: KeyInfo, box: Box, ren: var TermRenderer) =

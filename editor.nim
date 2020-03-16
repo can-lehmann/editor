@@ -421,7 +421,7 @@ proc new_buffer(editor: Editor) =
   editor.autocomplete = make_autocomplete_context(editor.buffer)
 
 proc compute_line_numbers_width(editor: Editor): int
-method process_mouse(editor: Editor, mouse: Mouse) =
+method process_mouse(editor: Editor, mouse: Mouse): bool =
   if editor.dialog.kind != DialogNone:
     editor.dialog.process_mouse(editor, mouse)
     return
@@ -454,6 +454,8 @@ method process_mouse(editor: Editor, mouse: Mouse) =
       else: discard
     return
   elif mouse.y == 0:
+    if mouse.x < line_numbers_width:
+      return true
     return
   
   case mouse.kind:
