@@ -157,6 +157,30 @@ proc skip(text: seq[Rune], pos, dir: int): int =
         text[pos + result].is_alpha_numeric() == v:
     result += dir
 
+proc process_mouse*(entry: var Entry, mouse: Mouse) =
+  var pos = mouse.pos.x
+  if pos < 0:
+    pos = 0
+  if pos > entry.text.len:
+    pos = entry.text.len
+  
+  case mouse.kind:
+    of MouseDown:
+      if mouse.button != 0:
+        return
+      entry.cursor = Cursor(kind: CursorInsert, pos: pos)
+    of MouseMove, MouseUp:
+      if not ((mouse.kind == MouseMove and mouse.buttons[0]) or
+              (mouse.kind == MouseUp and mouse.button == 0)):
+        return
+      case entry.cursor.kind:
+        of CursorInsert:
+          if pos != entry.cursor.pos:
+            entry.cursor = Cursor(kind: CursorSelection, start: entry.cursor.pos, stop: pos)
+        of CursorSelection:
+          entry.cursor.stop = pos
+    else: discard
+
 proc process_key*(entry: var Entry, key: Key) =
   case key.kind:
     of KeyArrowLeft:

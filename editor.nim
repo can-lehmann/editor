@@ -132,6 +132,11 @@ proc process_mouse(quick_open: QuickOpen, editor: Editor, mouse: Mouse) =
   var mouse_rel = mouse
   mouse_rel.x -= len("Search: ")
   mouse_rel.y -= 2
+
+  if mouse.y == 1:
+    quick_open.entry.process_mouse(mouse_rel)
+    return
+  
   case mouse.kind:
     of MouseUp:
       if quick_open.list.process_mouse(mouse_rel):
@@ -424,7 +429,33 @@ method process_mouse(editor: Editor, mouse: Mouse) =
   editor.detach_scroll = true
   let
     line_numbers_width = editor.compute_line_numbers_width() + 1
+    prompt_size = editor.prompt.compute_size()
     pos = editor.scroll + Index2d(x: mouse.x - line_numbers_width - 1, y: mouse.y - 1)
+  
+  if mouse.y >= editor.window_size.y - prompt_size:
+    let field = mouse.y - (editor.window_size.y - prompt_size) - 1
+    if editor.prompt.kind != PromptActive:
+      return
+    case mouse.kind:
+      of MouseDown:
+        if mouse.button == 0:
+          if field >= 0 and field < editor.prompt.fields.len:
+            editor.prompt.selected_field = field
+            var mouse_rel = mouse
+            mouse_rel.x = mouse.x - editor.prompt.fields[field].title.len
+            mouse_rel.y = 0
+            editor.prompt.fields[field].entry.process_mouse(mouse_rel)
+      of MouseMove, MouseUp:
+        let selected = editor.prompt.selected_field
+        var mouse_rel = mouse
+        mouse_rel.x = mouse.x - editor.prompt.fields[selected].title.len
+        mouse_rel.y = 0
+        editor.prompt.fields[selected].entry.process_mouse(mouse_rel)
+      else: discard
+    return
+  elif mouse.y == 0:
+    return
+  
   case mouse.kind:
     of MouseDown:
       if mouse.button == 0:
