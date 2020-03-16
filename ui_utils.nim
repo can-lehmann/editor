@@ -267,6 +267,7 @@ type
     items*: seq[seq[Rune]]
     selected*: int
     view*: int
+    detached: bool
 
 proc make_list*(items: seq[seq[Rune]]): List =
   List(items: items, view: 0, selected: 0)
@@ -274,7 +275,22 @@ proc make_list*(items: seq[seq[Rune]]): List =
 proc make_list*(items: seq[string]): List =
   make_list(items.map(to_runes))
 
+proc process_mouse*(list: var List, mouse: Mouse): bool =
+  case mouse.kind:
+    of MouseScroll:
+      list.detached = true
+      list.view += mouse.delta * 2
+    of MouseDown, MouseMove, MouseUp:
+      if mouse.buttons[0] or
+         (mouse.kind == MouseUp and mouse.button == 0):
+        let selected = mouse.y + list.view
+        if selected >= 0 and selected < list.items.len:
+          list.selected = selected
+          return true
+    else: discard
+
 proc process_key*(list: var List, key: Key) =
+  list.detached = false
   case key.kind:
     of KeyArrowUp:
       list.selected -= 1
@@ -287,12 +303,15 @@ proc process_key*(list: var List, key: Key) =
     else: discard
 
 proc scroll(list: var List, height: int) =
-  while list.selected - list.view >= height - 3:
-    list.view += 1
-  
-  while list.selected - list.view < 3:
-    list.view -= 1
+  if not list.detached:
+    while list.selected - list.view >= height - 3:
+      list.view += 1
+    
+    while list.selected - list.view < 3:
+      list.view -= 1
 
+  if list.view >= list.items.len:
+    list.view = list.items.len - 1
   if list.view < 0:
     list.view = 0
 

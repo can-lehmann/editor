@@ -121,14 +121,27 @@ proc update_list(quick_open: QuickOpen) =
   quick_open.list.selected = quick_open.list.selected.max(0).min(quick_open.list.items.len - 1)
 
 proc load_file(editor: Editor, path: string)
+proc open_selected(quick_open: QuickOpen, editor: Editor) =
+  if quick_open.list.selected < quick_open.shown_files.len and
+     quick_open.list.selected >= 0:
+    let path = quick_open.shown_files[quick_open.list.selected].path 
+    editor.load_file(path)
+    editor.dialog = Dialog(kind: DialogNone)
+
+proc process_mouse(quick_open: QuickOpen, editor: Editor, mouse: Mouse) =
+  var mouse_rel = mouse
+  mouse_rel.x -= len("Search: ")
+  mouse_rel.y -= 2
+  case mouse.kind:
+    of MouseUp:
+      if quick_open.list.process_mouse(mouse_rel):
+        quick_open.open_selected(editor)
+    else: discard quick_open.list.process_mouse(mouse_rel)
+
 proc process_key(quick_open: QuickOpen, editor: Editor, key: Key) =
   case key.kind:
     of KeyReturn:
-      if quick_open.list.selected < quick_open.shown_files.len and
-         quick_open.list.selected >= 0:
-        let path = quick_open.shown_files[quick_open.list.selected].path 
-        editor.load_file(path)
-        editor.dialog = Dialog(kind: DialogNone)
+      quick_open.open_selected(editor)
     of KeyArrowDown, KeyArrowUp:
       quick_open.list.process_key(key)
     else:
@@ -176,6 +189,11 @@ proc process_key(dialog: Dialog, editor: Editor, key: Key) =
   case dialog.kind:
     of DialogNone: discard
     of DialogQuickOpen: dialog.quick_open.process_key(editor, key)
+
+proc process_mouse(dialog: Dialog, editor: Editor, mouse: Mouse) =
+  case dialog.kind:
+    of DialogNone: discard
+    of DialogQuickOpen: dialog.quick_open.process_mouse(editor, mouse)
 
 proc render(dialog: Dialog, box: Box, ren: var TermRenderer) =
   case dialog.kind:
@@ -399,9 +417,13 @@ proc new_buffer(editor: Editor) =
 
 proc compute_line_numbers_width(editor: Editor): int
 method process_mouse(editor: Editor, mouse: Mouse) =
+  if editor.dialog.kind != DialogNone:
+    editor.dialog.process_mouse(editor, mouse)
+    return
+
   editor.detach_scroll = true
   let
-    line_numbers_width = editor.compute_line_numbers_width() + 1    
+    line_numbers_width = editor.compute_line_numbers_width() + 1
     pos = editor.scroll + Index2d(x: mouse.x - line_numbers_width - 1, y: mouse.y - 1)
   case mouse.kind:
     of MouseDown:
@@ -426,7 +448,7 @@ method process_mouse(editor: Editor, mouse: Mouse) =
             let start = editor.primary_cursor().start
             editor.cursors = @[Cursor(kind: CursorSelection, start: start, stop: stop)]
     of MouseScroll:
-      editor.scroll.y += mouse.delta
+      editor.scroll.y += mouse.delta * 2
     else: discard
 
 method process_key(editor: Editor, key: Key) = 
