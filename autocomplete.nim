@@ -21,7 +21,7 @@
 # SOFTWARE.
 
 import unicode, sequtils, sugar, sets, tables, algorithm
-import buffer, utils, highlight
+import buffer, utils, highlight/highlight
 
 type
   AutocompleteContext* = ref object

@@ -20,8 +20,10 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import sequtils, strutils, os, sugar, streams, deques, unicode, sets, hashes, tables, algorithm
-import utils, ui_utils, termdiff, highlight, buffer, window_manager, autocomplete
+import sequtils, strutils, os, sugar, streams, deques
+import unicode, sets, hashes, tables, algorithm
+import utils, ui_utils, termdiff, highlight/highlight
+import buffer, window_manager, autocomplete
 
 # Types
 type  
@@ -77,7 +79,7 @@ type
     cursor_hook_id: int
     window_size: Index2d
     autocomplete: AutocompleteContext
- 
+
 # Dialog / QuickOpen
 proc `<`(a, b: FileEntry): bool = a.name < b.name
 

@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import utils, ui_utils, highlight, termdiff, buffer, strutils, tables, unicode
+import utils, ui_utils, highlight/highlight, termdiff, buffer, strutils, tables, unicode
 
 type
   Window* = ref object of RootObj

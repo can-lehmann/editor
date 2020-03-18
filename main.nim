@@ -21,8 +21,9 @@
 # SOFTWARE.
 
 import unicode, tables, os
-import termdiff, highlight, window_manager
+import termdiff, window_manager
 import editor, keyinfo, calc, file_manager
+import highlight/highlight, highlight/nim, highlight/html
 
 setup_term()
 system.add_quit_proc(quit_app)
@@ -32,13 +33,13 @@ var
   languages = @[
     Language(
       name: "Nim",
-      highlighter: tokenize_nim,
+      highlighter: new_nim_highlighter,
       file_exts: @["nim", "nims"],
       indent_width: 2
     ),
     Language(
       name: "HTML",
-      highlighter: tokenize_html,
+      highlighter: new_html_highlighter,
       file_exts: @["html", "htm"],
       indent_width: 2,
       snippets: to_table({

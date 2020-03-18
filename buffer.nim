@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import utils, highlight, strutils, unicode, sequtils, tables
+import utils, highlight/highlight, strutils, unicode, sequtils, tables
 
 type
   ActionKind = enum ActionDelete, ActionInsert
@@ -70,15 +70,10 @@ proc call_hooks(buffer: Buffer, start, delta: int) =
 
 proc update_tokens*(buffer: Buffer) =
   buffer.tokens = @[]
-  buffer.tokens_done = true
+  buffer.tokens_done = false
   
   if buffer.language == nil:
     return
-  
-  var iter = buffer.language.highlighter(buffer.text, 0)
-  for token in iter():
-    buffer.tokens.add(token)
-  
 
 proc delete_tokens*(buffer: Buffer, start: int) =
   while buffer.tokens.len > 0 and
@@ -93,21 +88,26 @@ proc get_token*(buffer: Buffer, index: int): Token =
   if buffer.tokens_done or buffer.language == nil:
     return Token(kind: TokenNone, start: -1, stop: -1)
 
-  var initial = 0  
-  if buffer.tokens.len > 0:
-    initial = buffer.tokens[buffer.tokens.len - 1].stop
-  
-  var
-    iter = buffer.language.highlighter(buffer.text, initial)
-    it = 0
+  var state: HighlightState
+  if buffer.tokens.len == 0:
+    if buffer.language.highlighter == nil:
+      return Token(kind: TokenNone, start: -1, stop: -1)
+    state = buffer.language.highlighter()
+  else:
+    state = buffer.tokens[^1].state
 
-  for token in iter():
-    buffer.tokens.add(token)
-    if it == index:
-      return token
-    it += 1
+  if state == nil:
+    return Token(kind: TokenNone, start: -1, stop: -1)
   
-  return Token(kind: TokenNone, start: -1, stop: -1)
+  while index >= buffer.tokens.len:
+    let token = state.next(buffer.text)
+    if token.kind == TokenNone:
+      buffer.tokens_done = true
+      return Token(kind: TokenNone, start: -1, stop: -1)
+    buffer.tokens.add(token)
+    state = token.state
+
+  return buffer.tokens[^1]
 
 proc index_lines*(text: seq[Rune]): seq[int] =
   result.add(0)
