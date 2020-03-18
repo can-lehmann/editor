@@ -174,6 +174,10 @@ proc read_key*(): Key =
     of 338: return Key(kind: KeyPageDown)
     of 262: return Key(kind: KeyHome)
     of 360: return Key(kind: KeyEnd)
+    of 391: return Key(kind: KeyHome, shift: true)
+    of 386: return Key(kind: KeyEnd, shift: true)
+    of 398: return Key(kind: KeyPageUp, shift: true)
+    of 396: return Key(kind: KeyPageDown, shift: true)
     else: discard
   
   if key_code <= 26:

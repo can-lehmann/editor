@@ -128,7 +128,7 @@ proc open_selected(quick_open: QuickOpen, editor: Editor) =
     editor.load_file(path)
     editor.dialog = Dialog(kind: DialogNone)
 
-proc process_mouse(quick_open: QuickOpen, editor: Editor, mouse: Mouse) =
+proc process_mouse(quick_open: QuickOpen, editor: Editor, mouse: Mouse): bool =
   var mouse_rel = mouse
   mouse_rel.x -= len("Search: ")
   mouse_rel.y -= 2
@@ -136,7 +136,11 @@ proc process_mouse(quick_open: QuickOpen, editor: Editor, mouse: Mouse) =
   if mouse.y == 1:
     quick_open.entry.process_mouse(mouse_rel)
     return
-  
+  elif mouse.y == 0:
+    if mouse.x < len("Search:"):
+      return true
+    return
+
   case mouse.kind:
     of MouseUp:
       if quick_open.list.process_mouse(mouse_rel):
@@ -195,10 +199,10 @@ proc process_key(dialog: Dialog, editor: Editor, key: Key) =
     of DialogNone: discard
     of DialogQuickOpen: dialog.quick_open.process_key(editor, key)
 
-proc process_mouse(dialog: Dialog, editor: Editor, mouse: Mouse) =
+proc process_mouse(dialog: Dialog, editor: Editor, mouse: Mouse): bool =
   case dialog.kind:
     of DialogNone: discard
-    of DialogQuickOpen: dialog.quick_open.process_mouse(editor, mouse)
+    of DialogQuickOpen: return dialog.quick_open.process_mouse(editor, mouse)
 
 proc render(dialog: Dialog, box: Box, ren: var TermRenderer) =
   case dialog.kind:
@@ -423,8 +427,7 @@ proc new_buffer(editor: Editor) =
 proc compute_line_numbers_width(editor: Editor): int
 method process_mouse(editor: Editor, mouse: Mouse): bool =
   if editor.dialog.kind != DialogNone:
-    editor.dialog.process_mouse(editor, mouse)
-    return
+    return editor.dialog.process_mouse(editor, mouse)
 
   editor.detach_scroll = true
   let
@@ -434,10 +437,14 @@ method process_mouse(editor: Editor, mouse: Mouse): bool =
   
   if mouse.y >= editor.window_size.y - prompt_size:
     let field = mouse.y - (editor.window_size.y - prompt_size) - 1
-    if editor.prompt.kind != PromptActive:
+    
+    if editor.prompt.kind != PromptActive and
+       editor.prompt.kind != PromptInactive:
       return
+
     case mouse.kind:
       of MouseDown:
+        editor.prompt.kind = PromptActive
         if mouse.button == 0:
           if field >= 0 and field < editor.prompt.fields.len:
             editor.prompt.selected_field = field
@@ -465,6 +472,8 @@ method process_mouse(editor: Editor, mouse: Mouse): bool =
           x: pos.x.max(0),
           y: pos.y.min(editor.buffer.lines.len - 1).max(0)
         )))
+        if editor.prompt.kind == PromptActive:
+          editor.prompt.kind = PromptInactive
     of MouseUp, MouseMove:
       if (mouse.kind == MouseUp and mouse.button == 0) or
          (mouse.kind == MouseMove and mouse.buttons[0]):

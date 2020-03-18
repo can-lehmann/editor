@@ -49,7 +49,7 @@ type
     undo_stack: seq[seq[Action]]
     redo_stack: seq[seq[Action]]
     indent_width*: int
-    
+
 proc len*(buffer: Buffer): int = buffer.text.len
 proc `[]`*(buffer: Buffer, index: int): Rune = buffer.text[index]
 
