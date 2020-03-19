@@ -54,27 +54,6 @@ const
     "openArray", "Table", "Deque", "HashSet"
   ]
 
-proc is_int(str: seq[Rune]): bool =
-  for it, chr in str:
-    if not ((chr.int64 >= 0 and chr.int64 <= 127 and char(chr).is_digit) or
-            chr == '_' or
-            (chr == '+' and it == 0 and str.len > 1) or
-            (chr == '-' and it == 0 and str.len > 1)):
-      return false
-  return true
-
-proc is_float(str: seq[Rune]): bool =
-  var point = false
-  for it, chr in str:
-    if not ((chr.int64 >= 0 and chr.int64 <= 127 and char(chr).is_digit) or
-            chr == '_' or
-            (chr == '+' and it == 0 and str.len > 1) or
-            (chr == '-' and it == 0 and str.len > 1)):
-      if chr == '.' and not point and str.len > 1:
-        point = true
-      else:
-        return false
-  return true
 
 proc token_kind(str: seq[Rune]): TokenKind =
   if $str == "true" or $str == "false":
@@ -83,7 +62,7 @@ proc token_kind(str: seq[Rune]): TokenKind =
     return TokenKeyword
   elif $str in NIM_TYPES:
     return TokenType
-  elif str.is_int or str.is_float:
+  elif str.is_int(allow_underscore=true) or str.is_float(allow_underscore=true):
     return TokenLiteral
   
   return TokenName

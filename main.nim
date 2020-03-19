@@ -23,7 +23,7 @@
 import unicode, tables, os
 import termdiff, window_manager
 import editor, keyinfo, calc, file_manager
-import highlight/highlight, highlight/nim, highlight/html
+import highlight/highlight, highlight/nim, highlight/html, highlight/lisp
 
 setup_term()
 system.add_quit_proc(quit_app)
@@ -45,6 +45,32 @@ var
       snippets: to_table({
         to_runes("html"): to_runes("<html>\n  <head>\n    <meta charset=\"utf-8\">\n  </head>\n  <body>\n  </body>\n</html>")
       })
+    ),
+    Language(
+      name: "JavaScript",
+      file_exts: @["js"],
+      indent_width: 2
+    ),
+    Language(
+      name: "CSS",
+      file_exts: @["css"],
+      indent_width: 2
+    ),
+    Language(
+      name: "Lisp/Scheme",
+      file_exts: @["clj", "lisp", "cl", "scm", "sld"],
+      highlighter: new_lisp_highlighter,
+      indent_width: 2
+    ),
+    Language(
+      name: "Python",
+      file_exts: @["py"],
+      indent_width: 4
+    ),
+    Language(
+      name: "JSON",
+      file_exts: @["json"],
+      indent_width: 2
     )
   ]
   window_constructors = @[
