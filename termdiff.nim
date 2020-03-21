@@ -31,7 +31,7 @@ export TermScreen, make_term_screen, height, `[]`
 export setup_term, reset_term, read_key, read_mouse, terminal_width, terminal_height
 
 export Color, BaseColor
-export Key, KeyKind, Mouse, MouseKind
+export Key, KeyKind, Mouse, MouseKind, `$`
 
 proc make_term_screen*(): owned TermScreen =
   make_term_screen(terminal_width(), terminal_height())

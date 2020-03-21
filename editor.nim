@@ -495,6 +495,61 @@ method process_mouse(editor: Editor, mouse: Mouse): bool =
       editor.scroll.y += mouse.delta * 2
     else: discard
 
+proc select_next(editor: Editor) =
+  if editor.primary_cursor().kind == CursorSelection:
+    let
+      cur = editor.primary_cursor().sort()
+      text = editor.buffer.slice(cur.start, cur.stop)
+    var pos = editor.buffer.text.find(text, cur.stop)
+    if pos == -1:
+      pos = editor.buffer.text.find(text)
+    if pos != -1 and pos != cur.start:
+      editor.cursors.add(Cursor(kind: CursorSelection, start: pos, stop: pos + text.len))
+      editor.merge_cursors()
+
+proc jump_back(editor: Editor) =
+  if editor.jump_stack.len > 0:
+    editor.cursors = @[Cursor(kind: CursorInsert, pos: editor.jump_stack.pop())]
+
+proc cut(editor: Editor) =
+  editor.copy()
+  editor.delete_selections()
+
+proc paste(editor: Editor) =
+  editor.delete_selections()
+  editor.insert(editor.app.copy_buffer.paste())
+
+proc show_find(editor: Editor) =
+  editor.show_prompt("Find", @["Pattern: "], callback=find_pattern)
+
+proc show_goto(editor: Editor) =
+  editor.show_prompt("Go to Line", @["Line: "], callback=goto_line)
+
+proc show_replace(editor: Editor) =
+  editor.show_prompt(
+    "Find and replace",
+    @["Pattern: ", "Replace: "],
+    callback=replace_pattern
+  )
+
+proc save(editor: Editor) =
+  if editor.buffer.file_path == "":
+    editor.show_prompt("Save", @["File Name:"], callback=save_as)
+  else:
+    editor.buffer.save()
+    editor.autocomplete.recount_words()
+    editor.show_info(@["File saved."])
+
+proc show_quick_open(editor: Editor) =
+  editor.dialog = Dialog(
+    kind: DialogQuickOpen,
+    quick_open: make_quick_open(editor.app)
+  )
+
+proc only_primary_cursor(editor: Editor) =
+  var cur = editor.primary_cursor()
+  editor.cursors = @[cur]
+
 method process_key(editor: Editor, key: Key) = 
   if key.kind != KeyUnknown and key.kind != KeyNone:
     editor.detach_scroll = false
@@ -617,8 +672,7 @@ method process_key(editor: Editor, key: Key) =
           of CursorInsert:
             editor.buffer.delete(cursor.pos, cursor.pos + 1)
     of KeyEscape:
-      var cur = editor.primary_cursor()
-      editor.cursors = @[cur]
+      editor.only_primary_cursor()
     of KeyPaste:
       editor.insert(key.text)
     of KeyChar:
@@ -650,48 +704,18 @@ method process_key(editor: Editor, key: Key) =
                   let cur = cursor.sort()
                   editor.buffer.unindent(cur.start, cur.stop)
           of Rune('a'): editor.select_all()
-          of Rune('t'):
-            editor.dialog = Dialog(
-              kind: DialogQuickOpen,
-              quick_open: make_quick_open(editor.app)
-            )
-          of Rune('s'):
-            if editor.buffer.file_path == "":
-              editor.show_prompt("Save", @["File Name:"], callback=save_as)
-            else:
-              editor.buffer.save()
-              editor.autocomplete.recount_words()
-              editor.show_info(@["File saved."])
-          of Rune('n'):
-            editor.new_buffer()
-          of Rune('r'):
-            editor.show_prompt("Find and replace", @["Pattern: ", "Replace: "], callback=replace_pattern)
-          of Rune('f'): editor.show_prompt("Find", @["Pattern: "], callback=find_pattern)
-          of Rune('g'): editor.show_prompt("Go to Line", @["Line: "], callback=goto_line)
-          of Rune('v'):
-            editor.delete_selections()
-            editor.insert(editor.app.copy_buffer.paste())
+          of Rune('t'): editor.show_quick_open()
+          of Rune('s'): editor.save()
+          of Rune('n'): editor.new_buffer()
+          of Rune('r'): editor.show_replace()
+          of Rune('f'): editor.show_find()
+          of Rune('g'): editor.show_goto()
+          of Rune('v'): editor.paste()
           of Rune('c'): editor.copy()
-          of Rune('x'):
-            editor.copy()
-            editor.delete_selections()
-          of Rune('b'):
-            if editor.jump_stack.len > 0:
-              editor.cursors = @[Cursor(kind: CursorInsert, pos: editor.jump_stack.pop())]
-          of Rune('d'):
-            if editor.primary_cursor().kind == CursorSelection:
-              let
-                cur = editor.primary_cursor().sort()
-                text = editor.buffer.slice(cur.start, cur.stop)
-              var pos = editor.buffer.text.find(text, cur.stop)
-              if pos == -1:
-                pos = editor.buffer.text.find(text)
-              if pos != -1 and pos != cur.start:
-                editor.cursors.add(Cursor(kind: CursorSelection, start: pos, stop: pos + text.len))
-                editor.merge_cursors()
-          of Rune('o'):
-            var cur = editor.primary_cursor()
-            editor.cursors = @[cur]
+          of Rune('x'): editor.cut()
+          of Rune('b'): editor.jump_back()
+          of Rune('d'): editor.select_next()
+          of Rune('o'): editor.only_primary_cursor()
           of Rune('z'): editor.buffer.undo()
           of Rune('y'): editor.buffer.redo()
           else: discard
@@ -699,6 +723,85 @@ method process_key(editor: Editor, key: Key) =
         editor.insert(key.chr)
     else: discard
   editor.merge_cursors()
+
+method list_commands(editor: Editor): seq[Command] =
+  return @[
+    Command(
+      name: "Undo",
+      shortcut: @[Key(kind: KeyChar, ctrl: true, chr: Rune('z'))],
+      cmd: () => editor.buffer.undo()
+    ),
+    Command(
+      name: "Redo",
+      shortcut: @[Key(kind: KeyChar, ctrl: true, chr: Rune('y'))],
+      cmd: () => editor.buffer.redo()
+    ),
+    Command(
+      name: "Select All",
+      shortcut: @[Key(kind: KeyChar, ctrl: true, chr: Rune('a'))],
+      cmd: () => editor.select_all()
+    ),
+    Command(
+      name: "Quick Open",
+      shortcut: @[Key(kind: KeyChar, ctrl: true, chr: Rune('t'))],
+      cmd: () => editor.show_quick_open()
+    ),
+    Command(
+      name: "Save",
+      shortcut: @[Key(kind: KeyChar, ctrl: true, chr: Rune('s'))],
+      cmd: () => editor.save()
+    ),
+    Command(
+      name: "New Buffer",
+      shortcut: @[Key(kind: KeyChar, ctrl: true, chr: Rune('n'))],
+      cmd: () => editor.new_buffer()
+    ),
+    Command(
+      name: "Find and Replace",
+      shortcut: @[Key(kind: KeyChar, ctrl: true, chr: Rune('r'))],
+      cmd: () => editor.show_replace()
+    ),
+    Command(
+      name: "Find",
+      shortcut: @[Key(kind: KeyChar, ctrl: true, chr: Rune('f'))],
+      cmd: () => editor.show_find()
+    ),
+    Command(
+      name: "Go to Line",
+      shortcut: @[Key(kind: KeyChar, ctrl: true, chr: Rune('g'))],
+      cmd: () => editor.show_goto()
+    ),
+    Command(
+      name: "Paste",
+      shortcut: @[Key(kind: KeyChar, ctrl: true, chr: Rune('v'))],
+      cmd: () => editor.paste()
+    ),
+    Command(
+      name: "Copy",
+      shortcut: @[Key(kind: KeyChar, ctrl: true, chr: Rune('c'))],
+      cmd: () => editor.copy()
+    ),
+    Command(
+      name: "Cut",
+      shortcut: @[Key(kind: KeyChar, ctrl: true, chr: Rune('x'))],
+      cmd: () => editor.cut()
+    ),
+    Command(
+      name: "Jump Back",
+      shortcut: @[Key(kind: KeyChar, ctrl: true, chr: Rune('b'))],
+      cmd: () => editor.jump_back()
+    ),
+    Command(
+      name: "Select Next",
+      shortcut: @[Key(kind: KeyChar, ctrl: true, chr: Rune('d'))],
+      cmd: () => editor.select_next()
+    ),
+    Command(
+      name: "Only Primary Cursor",
+      shortcut: @[Key(kind: KeyChar, ctrl: true, chr: Rune('o'))],
+      cmd: () => editor.only_primary_cursor()
+    )
+  ]
 
 proc compute_line_numbers_width(editor: Editor): int =
   var max_line_number = editor.buffer.lines.len

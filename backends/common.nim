@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import unicode, sequtils
+import unicode, sequtils, sugar, strutils
 
 type 
   BaseColor* = enum
@@ -104,3 +104,32 @@ proc `[]`*(screen: TermScreen, x, y: int): CharCell =
 proc `[]=`*(screen: TermScreen, x, y: int, cell: CharCell) =
   screen.data[x + y * screen.width] = cell
 
+proc `$`*(key: Key): string =
+  if key.ctrl:
+    result &= "Ctrl + "
+  if key.alt:
+    result &= "Alt + "
+  if key.shift:
+    result &= "Shift + "
+  
+  case key.kind:
+    of KeyUnknown: result &= "Unknown (" & $key.key_code & ")"
+    of KeyChar: result &= key.chr
+    of KeyFn: result &= "F" & $key.fn
+    of KeyPaste: result &= "Paste (" & $key.text & ")"
+    of KeyArrowUp: result &= "Up"
+    of KeyArrowDown: result &= "Down"
+    of KeyArrowLeft: result &= "Left"
+    of KeyArrowRight: result &= "Right"
+    of KeyHome: result &= "Home"
+    of KeyEnd: result &= "End"
+    of KeyPageUp: result &= "Page Up"
+    of KeyPageDown: result &= "Page Down"
+    of KeyEscape: result &= "Escape"
+    of KeyDelete: result &= "Delete"
+    of KeyReturn: result &= "Return"
+    of KeyBackspace: result &= "Backspace"
+    else: result &= $key.kind
+
+proc `$`*(keys: seq[Key]): string =
+  keys.map(key => $key).join(" ")

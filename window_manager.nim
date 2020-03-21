@@ -26,6 +26,11 @@ import utils, ui_utils, highlight/highlight, termdiff, buffer
 type
   Window* = ref object of RootObj
 
+  Command* = object
+    name*: string
+    shortcut*: seq[Key]
+    cmd*: proc () {.closure.}
+
   PaneKind* = enum PaneWindow, PaneSplitH, PaneSplitV
   Pane* = ref PaneObj
   PaneObj* = object
@@ -61,6 +66,7 @@ method process_key*(window: Window, key: Key) {.base.} = quit "Not implemented"
 method process_mouse*(window: Window, mouse: Mouse): bool {.base.} = discard
 method render*(window: Window, box: Box, ren: var TermRenderer) {.base.} = quit "Not implemented"
 method close*(window: Window) {.base.} = discard
+method list_commands*(window: Window): seq[Command] {.base.} = discard
 
 # Launcher
 proc make_launcher(app: App): Window =
@@ -106,6 +112,83 @@ proc make_window*(app: App): Window =
 
 proc make_window_constructor*(name: string, make: proc (app: App): Window): WindowConstructor =
   WindowConstructor(name: name, make: make)
+
+# Command Search
+type
+  CommandSearch = ref object of Window
+    app: App
+    prev_window: Window
+    list: List
+    entry: Entry
+    commands: seq[Command]
+    shown_commands: seq[Command]
+
+proc update_list(cmd_search: CommandSearch) =
+  cmd_search.shown_commands = cmd_search.commands
+    .filter(cmd => to_lower($cmd_search.entry.text) in cmd.name.to_lower())
+
+  cmd_search.list.items = cmd_search.shown_commands
+    .map(cmd => to_runes(cmd.name & " (" & $cmd.shortcut & ")"))
+
+  if cmd_search.list.selected >= cmd_search.list.items.len:
+    cmd_search.list.selected = cmd_search.list.items.len - 1
+
+  if cmd_search.list.selected < 0:
+    cmd_search.list.selected = 0
+
+proc make_command_search(app: App, prev_window: Window): Window =
+  let cmd_search = CommandSearch(
+    app: app,
+    prev_window: prev_window,
+    list: make_list(@[""]),
+    entry: make_entry(app.copy_buffer),
+    commands: prev_window.list_commands()
+  )
+  cmd_search.update_list()
+  return cmd_search
+
+proc run_command(cmd_search: CommandSearch) =
+  let selected = cmd_search.list.selected
+  if selected < 0 or selected >= cmd_search.shown_commands.len:
+    return
+  cmd_search.app.root_pane.open_window(cmd_search.prev_window)
+  cmd_search.shown_commands[selected].cmd()
+
+method process_mouse(cmd_search: CommandSearch, mouse: Mouse): bool =
+  if mouse.x < len("Search:") and mouse.y == 0:
+    return true
+
+  var mouse_rel = mouse
+  mouse_rel.x -= 2
+  mouse_rel.y -= 2
+
+  case mouse.kind:
+    of MouseUp:
+      if cmd_search.list.process_mouse(mouse_rel):
+        cmd_search.run_command()
+    else:
+      discard cmd_search.list.process_mouse(mouse_rel)
+
+method process_key(cmd_search: CommandSearch, key: Key) =
+  case key.kind:
+    of KeyEscape:
+      cmd_search.app.root_pane.open_window(cmd_search.prev_window)
+    of KeyReturn:
+      cmd_search.run_command()
+    of KeyArrowUp, KeyArrowDown:
+      cmd_search.list.process_key(key)
+    else:
+      cmd_search.entry.process_key(key)
+      cmd_search.update_list()
+
+method render(cmd_search: CommandSearch, box: Box, ren: var TermRenderer) =
+  let sidebar_width = len("Search:")
+  render_border("Command Search", sidebar_width, box, ren)
+  ren.move_to(box.min + Index2d(y: 1))
+  ren.put("Search:", fg=Color(base: ColorBlack), bg=Color(base: ColorWhite))
+  ren.move_to(box.min + Index2d(y: 1, x: sidebar_width + 1))
+  cmd_search.entry.render(ren)
+  cmd_search.list.render(Box(min: box.min + Index2d(x: sidebar_width + 1, y: 2), max: box.max), ren)
 
 # Pane
 proc select_below*(pane: Pane): bool =
@@ -224,10 +307,17 @@ proc open_window*(pane: Pane, window: Window) =
         pane.pane_b.open_window(window)
       else:
         pane.pane_a.open_window(window)
- 
-proc open_launcher(app: App) =
-  app.root_pane.open_window(app.make_launcher())
- 
+
+proc active_window*(pane: Pane): Window =  
+  case pane.kind:
+    of PaneWindow:
+      return pane.window
+    else:
+      if pane.selected:
+        return pane.pane_b.active_window()
+      else:
+        return pane.pane_a.active_window()
+
 proc process_mouse*(pane: Pane, mouse: Mouse, box: Box): (int, int) =
   case pane.kind:
     of PaneWindow:
@@ -332,6 +422,12 @@ proc render*(pane: Pane, ren: var TermRenderer) =
   ), ren)
 
 # App
+proc open_launcher(app: App) =
+  app.root_pane.open_window(app.make_launcher())
+
+proc open_command_search(app: App) =
+  app.root_pane.open_window(app.make_command_search(app.root_pane.active_window()))
+
 proc make_app*(languages: seq[Language], window_constructors: seq[WindowConstructor]): owned App =
   return App(
     copy_buffer: make_copy_buffer(),
@@ -427,6 +523,10 @@ proc process_key*(app: App, key: Key): bool =
         of KeyArrowRight:
           if key.alt and not key.shift and not key.ctrl:
             discard app.root_pane.select_right()
+            return
+        of KeyFn:
+          if key.fn == 1:
+            app.open_command_search()
             return
         else: discard
       app.root_pane.process_key(key)
