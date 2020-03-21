@@ -186,6 +186,9 @@ proc read_key*(): Key =
       chr: Rune(char(key_code - 1 + ord('a'))),
       ctrl: true
     )
+  
+  if key_code >= 265 and key_code <= 276:
+    return Key(kind: KeyFn, fn: key_code - 265 + 1)
     
   if key_code <= 255:
     var str = $chr(key_code)

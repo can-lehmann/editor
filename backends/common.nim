@@ -62,7 +62,7 @@ type
     KeyNone, KeyUnknown, KeyMouse,
     KeyChar, KeyReturn, KeyBackspace, KeyDelete, KeyEscape,
     KeyArrowLeft, KeyArrowRight, KeyArrowDown, KeyArrowUp,
-    KeyHome, KeyEnd, KeyPageUp, KeyPageDown,
+    KeyHome, KeyEnd, KeyPageUp, KeyPageDown, KeyFn,
     KeyPaste, KeyQuit
 
   Key* = object
@@ -73,6 +73,7 @@ type
       of KeyChar: chr*: Rune
       of KeyUnknown: key_code*: int
       of KeyPaste: text*: seq[Rune]
+      of KeyFn: fn*: int
       else: discard
 
 type

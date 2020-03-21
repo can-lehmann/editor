@@ -20,7 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import utils, ui_utils, highlight/highlight, termdiff, buffer, strutils, tables, unicode
+import strutils, tables, unicode, sequtils, sugar
+import utils, ui_utils, highlight/highlight, termdiff, buffer
 
 type
   Window* = ref object of RootObj
@@ -40,7 +41,7 @@ type
 
   Launcher* = ref object of Window
     app: App
-    selected: int
+    list: List
   
   WindowConstructor* = object
     name: string
@@ -63,42 +64,42 @@ method close*(window: Window) {.base.} = discard
 
 # Launcher
 proc make_launcher(app: App): Window =
-  return Launcher(app: app, selected: 0)
+  return Launcher(app: app, list: make_list(app.window_constructors.map(c => c.name)))
 
 proc open_window*(pane: Pane, window: Window)
 
+proc open_selected(launcher: Launcher) =
+  let
+    selected = launcher.list.selected
+    window = launcher.app.window_constructors[selected].make(launcher.app)
+  launcher.app.root_pane.open_window(window)
+
 method process_key(launcher: Launcher, key: Key) =
   case key.kind:
-    of KeyArrowDown:
-      launcher.selected += 1
-      if launcher.selected >= launcher.app.window_constructors.len:
-        launcher.selected = launcher.app.window_constructors.len - 1
-    of KeyArrowUp:
-      launcher.selected -= 1
-      if launcher.selected < 0:
-        launcher.selected = 0
+    of KeyArrowDown, KeyArrowUp:
+      launcher.list.process_key(key)
     of KeyReturn:
-      let window = launcher.app.window_constructors[launcher.selected].make(launcher.app)
-      launcher.app.root_pane.open_window(window)
+      launcher.open_selected()
     else: discard
 
-method render(launcher: Launcher, box: Box, ren: var TermRenderer) =
-  let title = "  " & strutils.align_left("Launcher", box.size.x - 2)
-  ren.move_to(box.min)
-  ren.put(title, fg=Color(base: ColorBlack), bg=Color(base: ColorWhite, bright: true))
-  
-  for y in 0..<(box.size.y - 1):
-    ren.move_to(box.min.x, box.min.y + 1 + y)
-    ren.put(" ", fg=Color(base: ColorBlack), bg=Color(base: ColorWhite, bright: true))
+method process_mouse(launcher: Launcher, mouse: Mouse): bool =
+  if mouse.x == 0 and mouse.y == 0:
+    return true
 
-  for it, constructor in launcher.app.window_constructors:
-    if it + 1 >= box.size.y:
-      break
-    ren.move_to(box.min.x + 2, box.min.y + 1 + it)
-    if it == launcher.selected:
-      ren.put(constructor.name, reverse=true)
+  var mouse_rel = mouse
+  mouse_rel.x -= 2
+  mouse_rel.y -= 1
+
+  case mouse.kind:
+    of MouseUp:
+      if launcher.list.process_mouse(mouse_rel):
+        launcher.open_selected()
     else:
-      ren.put(constructor.name)
+      discard launcher.list.process_mouse(mouse_rel)
+
+method render(launcher: Launcher, box: Box, ren: var TermRenderer) =
+  render_border("Launcher", 1, box, ren)
+  launcher.list.render(Box(min: box.min + Index2d(x: 2, y: 1), max: box.max), ren)
 
 proc make_window*(app: App): Window =
   return app.window_constructors[0].make(app)
