@@ -790,14 +790,14 @@ method render(editor: Editor, box: Box, ren: var TermRenderer) =
         chr = editor.buffer[index]
         fg = Color(base: ColorDefault, bright: false)
         
-      if editor.buffer.get_token(current_token).kind != TokenNone:
-        if index >= editor.buffer.get_token(current_token).stop:
-          current_token += 1
+      while editor.buffer.get_token(current_token).kind != TokenNone and
+            index >= editor.buffer.get_token(current_token).stop:
+        current_token += 1
       
-        if editor.buffer.get_token(current_token).kind != TokenNone:
-          let token = editor.buffer.get_token(current_token)
-          if token.is_inside(index):
-            fg = token.color()
+      if editor.buffer.get_token(current_token).kind != TokenNone:
+        let token = editor.buffer.get_token(current_token)
+        if token.is_inside(index):
+          fg = token.color()
       
       if chr == ' ' and fg.base == ColorDefault:
         chr = '.'
