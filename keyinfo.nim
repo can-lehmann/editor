@@ -20,7 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import strutils, unicode, utils, window_manager, termdiff
+import strutils, unicode
+import utils, window_manager, termdiff
 
 type
   EventKind = enum EventKey, EventMouse
@@ -66,6 +67,14 @@ method render*(key_info: KeyInfo, box: Box, ren: var TermRenderer) =
         if event.key.kind == KeyChar:
           ren.put(" (" & $int(event.key.chr) & ")")
       of EventMouse: ren.put($event.mouse)
-    
+
+method list_commands(key_info: KeyInfo): seq[Command] =
+  return @[
+    Command(
+      name: "Clear",
+      cmd: proc () = key_info.events = @[]
+    )
+  ]
+
 proc make_key_info*(app: App): Window =
   return KeyInfo(app: app, events: @[])

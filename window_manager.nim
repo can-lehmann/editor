@@ -123,12 +123,17 @@ type
     commands: seq[Command]
     shown_commands: seq[Command]
 
+proc display(cmd: Command): string =
+  if cmd.shortcut.len == 0:
+    return cmd.name
+  return cmd.name & " (" & $cmd.shortcut & ")"
+
 proc update_list(cmd_search: CommandSearch) =
   cmd_search.shown_commands = cmd_search.commands
     .filter(cmd => to_lower($cmd_search.entry.text) in cmd.name.to_lower())
 
   cmd_search.list.items = cmd_search.shown_commands
-    .map(cmd => to_runes(cmd.name & " (" & $cmd.shortcut & ")"))
+    .map(cmd => to_runes(cmd.display()))
 
   if cmd_search.list.selected >= cmd_search.list.items.len:
     cmd_search.list.selected = cmd_search.list.items.len - 1

@@ -133,3 +133,33 @@ proc `$`*(key: Key): string =
 
 proc `$`*(keys: seq[Key]): string =
   keys.map(key => $key).join(" ")
+
+proc display_mouse_button(button: int): string =
+  case button:
+    of 0: return "Left"
+    of 1: return "Middle"
+    of 2: return "Right"
+    else: return "Button" & $button
+
+proc `$`*(mouse: Mouse): string =
+  case mouse.kind:
+    of MouseDown: result &= "Down"
+    of MouseUp: result &= "Up"
+    of MouseMove: result &= "Move"
+    of MouseScroll: result &= "Scroll"
+    else: discard
+  
+  case mouse.kind:
+    of MouseDown, MouseUp:
+      result &= " " & display_mouse_button(mouse.button)
+    of MouseScroll:
+      result &= " " & $mouse.delta
+    else: discard
+  
+  var pressed_buttons: seq[string] = @[]
+  for button, pressed in mouse.buttons.pairs:
+    if pressed:  
+      pressed_buttons.add(display_mouse_button(button))
+  
+  result &= " {" & pressed_buttons.join(", ") & "}"
+  result &= " (" & $mouse.x & ", " & $mouse.y & ")"
