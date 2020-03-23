@@ -80,12 +80,13 @@ proc send_command(ctx: Context, command: string) =
 method close(ctx: Context) =
   ctx.poll()
   
-  try:
-    ctx.send_command("quit")
-    discard ctx.nimsuggest.wait_for_exit(timeout=1000)
-    ctx.nimsuggest.close()
-  except OSError as e:
-    echo "OSError"
+  if ctx.nimsuggest != nil:
+    try:
+      ctx.send_command("quit")
+      discard ctx.nimsuggest.wait_for_exit(timeout=1000)
+      ctx.nimsuggest.close()
+    except OSError as e:
+      echo "OSError"
 
   remove_dir(ctx.folder)
 
@@ -129,8 +130,9 @@ proc execute(job: Job) =
   remove_file(job.path)
 
 method poll(ctx: Context) =
-  if ctx.proc_selector.select(0).len > 0 and ctx.port == Port(0):
-    ctx.port = Port(ctx.nimsuggest.output_stream().read_line().parse_int())
+  if ctx.nimsuggest != nil:
+    if ctx.proc_selector.select(0).len > 0 and ctx.port == Port(0):
+      ctx.port = Port(ctx.nimsuggest.output_stream().read_line().parse_int())
 
   while true:
     let fds = ctx.selector.select(0)

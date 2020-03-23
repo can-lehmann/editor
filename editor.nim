@@ -779,6 +779,16 @@ method process_key(editor: Editor, key: Key) =
             )
           elif key.chr in editor.autocompleter.finish:
             clear_completions = true
+    of KeyFn:
+      case key.fn:
+        of 2:
+          if editor.autocompleter != nil:
+            let pos = editor.primary_cursor().get_pos()
+            editor.autocompleter.complete(
+              editor.buffer, pos, ' ',
+              proc (comps: seq[Completion]) = editor.completions = comps
+            )
+        else: discard
     of KeyUnknown, KeyNone: clear_completions = false
     else: discard
   if clear_completions:
