@@ -64,7 +64,7 @@ proc substr*(text: seq[Rune], first, last: int): seq[Rune] =
   result = new_seq[Rune](last - first + 1)
   
   var it2 = 0
-  for it in first..last:
+  for it in max(first, 0)..min(last, text.len - 1):
     result[it2] = text[it]
     it2 += 1
 

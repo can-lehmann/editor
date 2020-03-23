@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import strutils, tables, unicode, sequtils, sugar
+import strutils, tables, unicode, sequtils, sugar, hashes
 import utils, ui_utils, highlight/highlight, termdiff, buffer
 
 type
@@ -61,6 +61,7 @@ type
     window_constructors*: seq[WindowConstructor]
     mode*: AppMode
     buffers*: Table[string, Buffer]
+    autocompleters*: Table[int, Autocompleter]
 
 method process_key*(window: Window, key: Key) {.base.} = quit "Not implemented"
 method process_mouse*(window: Window, mouse: Mouse): bool {.base.} = discard
@@ -434,6 +435,8 @@ proc open_command_search(app: App) =
   app.root_pane.open_window(app.make_command_search(app.root_pane.active_window()))
 
 proc make_app*(languages: seq[Language], window_constructors: seq[WindowConstructor]): owned App =
+  for it, lang in languages.pairs:
+    lang.id = it
   return App(
     copy_buffer: make_copy_buffer(),
     root_pane: nil,
@@ -447,6 +450,13 @@ proc make_buffer*(app: App, path: string): Buffer =
     return app.buffers[path]
   result = make_buffer(path, app.languages)
   app.buffers[path] = result
+  
+  if result.language != nil:
+    if result.language.make_autocompleter == nil:
+      return
+    if result.language.id notin app.autocompleters:
+      app.autocompleters[result.language.id] = result.language.make_autocompleter()
+    app.autocompleters[result.language.id].track(result)
 
 proc is_changed*(app: App, path: string): bool =
   if not app.buffers.has_key(path):
@@ -464,7 +474,15 @@ proc process_mouse*(app: App, mouse: Mouse) =
     max: Index2d(x: terminal_width(), y: terminal_height())
   ))
 
+proc close*(app: App) =
+  for comp in app.autocompleters.values:
+    comp.close()
+
 proc process_key*(app: App, key: Key): bool =
+  defer:
+    if result:
+      app.close()
+
   case app.mode:
     of AppModeNewPane:
       case key.kind:

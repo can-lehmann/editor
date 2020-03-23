@@ -23,7 +23,7 @@
 import sequtils, strutils, os, sugar, streams, deques
 import unicode, sets, hashes, tables, algorithm
 import utils, ui_utils, termdiff, highlight/highlight
-import buffer, window_manager, autocomplete
+import buffer, window_manager
 
 # Types
 type  
@@ -78,7 +78,8 @@ type
     jump_stack: seq[int]
     cursor_hook_id: int
     window_size: Index2d
-    autocomplete: AutocompleteContext
+    autocompleter: Autocompleter
+    completions: seq[Completion]
 
 # Dialog / QuickOpen
 proc `<`(a, b: FileEntry): bool = a.name < b.name
@@ -256,6 +257,7 @@ proc show_prompt(editor: Editor,
     )),
     callback: callback
   )
+  editor.completions = @[]
 
 proc hide_prompt(editor: Editor) = 
   editor.prompt = Prompt(kind: PromptNone)
@@ -316,6 +318,7 @@ proc update_scroll(editor: Editor, size: Index2d, detach: bool) =
 proc jump(editor: Editor, to: int) =
   editor.jump_stack.add(editor.primary_cursor().get_pos())
   editor.cursors = @[Cursor(kind: CursorInsert, pos: to)]
+  editor.completions = @[]
 
 proc goto_line(editor: Editor, inputs: seq[seq[Rune]]) =
   var line: int
@@ -362,8 +365,12 @@ proc save_as(editor: Editor, inputs: seq[seq[Rune]]) =
   editor.buffer.set_path(path, editor.app.languages)
   editor.app.buffers[path] = editor.buffer
   editor.buffer.save()
-  editor.autocomplete.recount_words()
   editor.hide_prompt()
+
+  if editor.buffer.language != nil:
+    let id = editor.buffer.language.id
+    if id in editor.app.autocompleters:
+      editor.autocompleter = editor.app.autocompleters[id]
 
 proc select_all(editor: Editor) =
   editor.cursors = @[Cursor(
@@ -416,7 +423,10 @@ proc load_file(editor: Editor, path: string) =
   editor.cursor_hook_id = editor.buffer.register_hook(editor.make_cursor_hook())
   editor.hide_prompt()
   editor.cursors = @[Cursor(kind: CursorInsert, pos: 0)]
-  editor.autocomplete = make_autocomplete_context(editor.buffer)
+  if editor.buffer.language != nil:
+    let id = editor.buffer.language.id
+    if id in editor.app.autocompleters:
+      editor.autocompleter = editor.app.autocompleters[id]
 
 proc new_buffer(editor: Editor) =
   editor.buffer.unregister_hook(editor.cursor_hook_id)
@@ -424,7 +434,25 @@ proc new_buffer(editor: Editor) =
   editor.cursor_hook_id = editor.buffer.register_hook(editor.make_cursor_hook())
   editor.hide_prompt()
   editor.cursors = @[Cursor(kind: CursorInsert, pos: 0)]
-  editor.autocomplete = make_autocomplete_context(editor.buffer)
+  editor.autocompleter = nil
+
+proc completion_query(editor: Editor): seq[Rune] =
+  if editor.autocompleter == nil:
+    return
+  var pos = editor.primary_cursor().get_pos() - 1
+  while pos >= 0 and
+        editor.buffer[pos] notin editor.autocompleter.triggers and
+        editor.buffer[pos] notin editor.autocompleter.finish:
+    result = editor.buffer[pos] & result
+    pos -= 1
+
+proc filter_completions(editor: Editor): seq[Completion] =
+  if editor.completions.len == 0:
+    return @[]
+  let query = editor.completion_query()
+  if query.len == 0:
+    return editor.completions
+  return editor.completions.search(query)
 
 proc compute_line_numbers_width(editor: Editor): int
 method process_mouse(editor: Editor, mouse: Mouse): bool =
@@ -537,7 +565,6 @@ proc save(editor: Editor) =
     editor.show_prompt("Save", @["File Name:"], callback=save_as)
   else:
     editor.buffer.save()
-    editor.autocomplete.recount_words()
     editor.show_info(@["File saved."])
 
 proc show_quick_open(editor: Editor) =
@@ -551,14 +578,19 @@ proc only_primary_cursor(editor: Editor) =
   editor.cursors = @[cur]
 
 method process_key(editor: Editor, key: Key) = 
+  if editor.autocompleter != nil:
+    editor.autocompleter.poll()
+
   if key.kind != KeyUnknown and key.kind != KeyNone:
     editor.detach_scroll = false
 
   if key.kind == KeyChar and key.ctrl and key.chr == Rune('e'):
     if editor.dialog.kind != DialogNone:
       editor.dialog = Dialog(kind: DialogNone)
-    else:
+    elif editor.prompt.kind != PromptNone:
       editor.hide_prompt()
+    else:
+      editor.completions = @[]
     return
 
   if editor.dialog.kind != DialogNone:
@@ -574,6 +606,7 @@ method process_key(editor: Editor, key: Key) =
 
   defer: editor.buffer.finish_undo_frame()
   
+  var clear_completions = true
   case key.kind:
     of KeyArrowLeft:
       for it, cursor in editor.cursors:
@@ -618,7 +651,7 @@ method process_key(editor: Editor, key: Key) =
     of KeyReturn:
       for it, cursor in editor.cursors:
         if cursor.kind == CursorSelection:
-          continue        
+          continue
         let
           indent_level = editor.buffer.indentation(cursor.pos)
           indent = repeat(' ', indent_level)
@@ -653,14 +686,25 @@ method process_key(editor: Editor, key: Key) =
         let pos = (editor.buffer.to_index(index) - 1).max(0)
         editor.update_cursor(it, pos, key.shift)
     of KeyBackspace:
+      clear_completions = false
       for it, cursor in editor.cursors:
         case cursor.kind
           of CursorSelection:
             let cur = cursor.sort()
+            if editor.completions.len > 0 and editor.autocompleter != nil and not clear_completions:
+              for chr in editor.buffer.text.substr(cur.start, cur.stop):
+                if chr in editor.autocompleter.triggers:
+                  clear_completions = true
+                  break
             editor.buffer.delete(cur.start, cur.stop)
             editor.cursors[it] = Cursor(kind: CursorInsert, pos: cur.start)
           of CursorInsert:
             if cursor.pos > 0:
+              if editor.completions.len > 0 and editor.autocompleter != nil and not clear_completions:
+                for chr in editor.buffer.text.substr(cursor.pos - 1, cursor.pos):
+                  if chr in editor.autocompleter.triggers:
+                    clear_completions = true
+                    break
               editor.buffer.delete(cursor.pos - 1, cursor.pos)
     of KeyDelete:
       for it, cursor in editor.cursors:
@@ -679,22 +723,20 @@ method process_key(editor: Editor, key: Key) =
       if key.ctrl:
         case key.chr:
           of Rune('i'):
-            if editor.cursors.len == 1 and editor.cursors[0].kind == CursorInsert:
-              let completions = editor.autocomplete.predict(editor.cursors[0].pos)
-              if completions.len > 0:
-                let
-                  cursor = editor.cursors[0]
-                  compl = completions[0]
-              
-                editor.buffer.replace(cursor.pos - compl.pos, cursor.pos, compl.text)
-                return
-            for cursor in editor.cursors:
-              case cursor.kind:
-                of CursorInsert:  
-                  editor.buffer.insert(cursor.pos, sequtils.repeat(Rune(' '), editor.buffer.indent_width))
-                of CursorSelection:
-                  let cur = cursor.sort()
-                  editor.buffer.indent(cur.start, cur.stop)
+            let comps = editor.filter_completions()
+            if comps.len > 0:
+              let
+                text = comps[0].text
+                query = editor.completion_query()
+              editor.insert(text[query.len..<text.len])
+            else:
+              for cursor in editor.cursors:
+                case cursor.kind:
+                  of CursorInsert:  
+                    editor.buffer.insert(cursor.pos, sequtils.repeat(Rune(' '), editor.buffer.indent_width))
+                  of CursorSelection:
+                    let cur = cursor.sort()
+                    editor.buffer.indent(cur.start, cur.stop)
           of Rune('I'):
             for cursor in editor.cursors:
               case cursor.kind:
@@ -721,7 +763,20 @@ method process_key(editor: Editor, key: Key) =
           else: discard
       else:
         editor.insert(key.chr)
+        clear_completions = false
+        if editor.autocompleter != nil:
+          if key.chr in editor.autocompleter.triggers:
+            let pos = editor.primary_cursor().get_pos()
+            editor.autocompleter.complete(
+              editor.buffer, pos, key.chr,
+              proc (comps: seq[Completion]) = editor.completions = comps
+            )
+          elif key.chr in editor.autocompleter.finish:
+            clear_completions = true
+    of KeyUnknown, KeyNone: clear_completions = false
     else: discard
+  if clear_completions:
+    editor.completions = @[]
   editor.merge_cursors()
 
 method list_commands(editor: Editor): seq[Command] =
@@ -809,6 +864,10 @@ proc compute_line_numbers_width(editor: Editor): int =
     result += 1
     max_line_number = max_line_number div 10
 
+proc compute_width(comps: seq[Completion]): int =
+  for comp in comps:
+    result = max(result, comp.text.len + 1)
+
 method render(editor: Editor, box: Box, ren: var TermRenderer) =
   if editor.dialog.kind != DialogNone:
     editor.dialog.render(box, ren)
@@ -870,7 +929,8 @@ method render(editor: Editor, box: Box, ren: var TermRenderer) =
     var
       index = editor.buffer.lines[it]
       reached_end = false
-    
+      is_indent = true
+ 
     while editor.buffer.get_token(current_token).kind != TokenNone and
           editor.buffer.get_token(current_token).stop < index:
       current_token += 1
@@ -902,20 +962,100 @@ method render(editor: Editor, box: Box, ren: var TermRenderer) =
         if token.is_inside(index):
           fg = token.color()
       
+      if chr != ' ':
+        is_indent = false
+      
       if chr == ' ' and fg.base == ColorDefault:
-        chr = '.'
-        fg = Color(base: ColorBlack, bright: true)  
+        let
+          indent_width = editor.buffer.indent_width
+          x = index - editor.buffer.lines[it]
+        if x mod indent_width == indent_width - 1 and is_indent:
+          chr = to_runes("│")[0]
+        else:
+          chr = '.'
+        fg = Color(base: ColorBlack, bright: true)
       
       ren.put(chr, fg=fg)
       index += 1
-    
     if index - editor.buffer.lines[it] + line_numbers_width + 1 >= box.size.x:
       reached_end = true
     
     if editor.is_under_cursor(index) and (not reached_end):
       ren.put(' ', reverse=true)
-          
   
+  # Render Completions
+  let
+    comps = editor.filter_completions()
+    comp_width = comps.compute_width()
+  var pos = editor.buffer.to_2d(editor.primary_cursor().get_pos()) + box.min
+  pos.y -= editor.scroll.y - 1
+  pos.x += line_numbers_width - 1
+  
+  const MAX_COMPS = 4
+  for it, comp in comps:
+    if it >= MAX_COMPS:
+      break
+    
+    let p = pos + Index2d(y: it + 1)
+    if p.y <= 0:
+      continue
+    if p.y >= box.max.y - prompt_size:
+      break
+    ren.move_to(p)
+    var
+      bg_color = Color(base: ColorBlack)
+      fg_color = Color(base: ColorWhite)
+      kind_chr: Rune = '.'
+    case comp.kind:
+      of CompProc:
+        kind_chr = 'p'
+        bg_color = Color(base: ColorRed)
+      of CompFunc:
+        kind_chr = 'f'
+        bg_color = Color(base: ColorRed)
+      of CompConverter:
+        kind_chr = 'c'
+        bg_color = Color(base: ColorRed)
+      of CompMethod:
+        kind_chr = 'm'
+        bg_color = Color(base: ColorRed)
+      of CompTemplate:
+        kind_chr = 't'
+        bg_color = Color(base: ColorRed)
+      of CompIterator:
+        kind_chr = 'i'
+        bg_color = Color(base: ColorRed)
+      of CompMacro:
+        kind_chr = 'm'
+        bg_color = Color(base: ColorRed)
+      of CompConst:
+        kind_chr = 'c'
+        bg_color = Color(base: ColorYellow)
+      of CompLet:
+        kind_chr = 'l'
+        bg_color = Color(base: ColorYellow)
+      of CompVar:
+        kind_chr = 'v'
+        bg_color = Color(base: ColorYellow)
+      of CompType:
+        kind_chr = 't'
+        bg_color = Color(base: ColorCyan)
+      of CompField:
+        kind_chr = 'f'
+        bg_color = Color(base: ColorCyan)
+      of CompEnum:
+        kind_chr = 'e'
+        bg_color = Color(base: ColorCyan)
+      else: discard
+    if bg_color.base == ColorYellow:
+      fg_color.base = ColorBlack
+    ren.put($kind_chr & " ", fg=fg_color, bg=bg_color)
+    let padding = sequtils.repeat(Rune(' '), comp_width - comp.text.len - 1)
+    if it == 0:
+      ren.put(comp.text & padding, reverse=true)
+    else:
+      ren.put(comp.text & padding, fg=Color(base:ColorWhite), bg=Color(base:ColorBlack))
+
   # Render prompt
   case editor.prompt.kind:
     of PromptInfo:
@@ -953,8 +1093,7 @@ proc make_editor*(app: App, buffer: Buffer): Editor =
     buffer: buffer,
     scroll: Index2d(x: 0, y: 0),
     cursors: @[Cursor(kind: CursorInsert, pos: 0)],
-    app: app,
-    autocomplete: make_autocomplete_context(buffer)
+    app: app
   )
   result.cursor_hook_id = result.buffer.register_hook(result.make_cursor_hook())
 

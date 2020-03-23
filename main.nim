@@ -21,9 +21,10 @@
 # SOFTWARE.
 
 import unicode, tables, os
-import termdiff, window_manager
+import termdiff, window_manager, buffer
 import editor, keyinfo, calc, file_manager
 import highlight/highlight, highlight/nim, highlight/html, highlight/lisp
+import autocomplete/comp_nim
 
 setup_term()
 system.add_quit_proc(quit_app)
@@ -35,7 +36,8 @@ var
       name: "Nim",
       highlighter: new_nim_highlighter,
       file_exts: @["nim", "nims"],
-      indent_width: 2
+      indent_width: 2,
+      make_autocompleter: make_nim_autocompleter
     ),
     Language(
       name: "HTML",
@@ -108,7 +110,7 @@ while true:
     if app.process_key(key):
       quit_app()
       break
-
+  
   var
     screen = make_term_screen()
     ren = make_term_renderer(screen)
@@ -116,4 +118,3 @@ while true:
 
   cur_screen.apply(screen)
   cur_screen = screen
-

@@ -202,7 +202,7 @@ proc update(term: Terminal): bool =
   term.redraw()
   
   var evt = sdl2.default_event
-  if not wait_event_timeout(evt, 1000):
+  if not wait_event_timeout(evt, 100):
     return
   while true:
     case evt.kind:

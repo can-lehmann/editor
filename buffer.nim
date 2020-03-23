@@ -20,9 +20,35 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import utils, highlight/highlight, strutils, unicode, sequtils, tables
+import strutils, unicode, sequtils, sugar, tables
+import utils, highlight/highlight
 
 type
+  CompKind* = enum
+    CompUnknown,
+    CompMod,
+    CompConst, CompLet, CompVar
+    CompEnum, CompType, CompField,
+    CompProc, CompFunc, CompConverter, CompMethod,
+    CompIterator, CompTemplate, CompMacro,
+
+  Completion* = object
+    kind*: CompKind
+    text*: seq[Rune]
+
+  Autocompleter* = ref object of RootObj
+    triggers*: seq[Rune]
+    finish*: seq[Rune]
+
+  Language* = ref object
+    id*: int
+    name*: string
+    highlighter*: proc (): HighlightState 
+    file_exts*: seq[string]
+    indent_width*: int
+    snippets*: Table[seq[Rune], seq[Rune]]
+    make_autocompleter*: proc (): Autocompleter
+
   ActionKind = enum ActionDelete, ActionInsert
 
   Action = object
@@ -50,6 +76,37 @@ type
     redo_stack: seq[seq[Action]]
     indent_width*: int
 
+# Autocompleter
+method track*(ctx: Autocompleter, buffer: Buffer) {.base.} =
+  quit "Abstract method known"
+
+method complete*(ctx: Autocompleter,
+                 buffer: Buffer,
+                 pos: int,
+                 trigger: Rune,
+                 callback: proc (comps: seq[Completion])) {.base.} =
+  quit "Abstract method complete"
+
+method poll*(ctx: Autocompleter) {.base.} =
+  quit "Abstract method poll"
+
+method close*(ctx: Autocompleter) {.base.} =
+  quit "Abstract method close"
+
+proc search*(comps: seq[Completion], query: seq[Rune]): seq[Completion] =
+  comps.filter(comp => comp.text.find(query) != -1)
+
+# Language
+proc detect_language*(langs: seq[Language], path: string): Language =
+  let
+    parts = path.split('.')
+    ext = parts[parts.len - 1]
+  for lang in langs:
+    if ext in lang.file_exts:
+      return lang
+  return nil
+
+# Buffer
 proc len*(buffer: Buffer): int = buffer.text.len
 proc `[]`*(buffer: Buffer, index: int): Rune = buffer.text[index]
 

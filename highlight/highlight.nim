@@ -37,13 +37,6 @@ type
     start*: int
     stop*: int
     state*: HighlightState
-    
-  Language* = ref object
-    name*: string
-    highlighter*: proc (): HighlightState 
-    file_exts*: seq[string]
-    indent_width*: int
-    snippets*: Table[seq[Rune], seq[Rune]]
 
 method next*(state: HighlightState, text: seq[Rune]): Token {.base.} = quit "Abstract"
 
@@ -98,12 +91,3 @@ proc color*(token: Token): Color =
     of TokenLiteral: return Color(base: ColorYellow, bright: false)
     of TokenType: return Color(base: ColorCyan, bright: true)
     else: return Color(base: ColorDefault, bright: false)
-
-proc detect_language*(langs: seq[Language], path: string): Language =
-  let
-    parts = path.split('.')
-    ext = parts[parts.len - 1]
-  for lang in langs:
-    if ext in lang.file_exts:
-      return lang
-  return nil
