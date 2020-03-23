@@ -371,6 +371,12 @@ proc save_as(editor: Editor, inputs: seq[seq[Rune]]) =
     let id = editor.buffer.language.id
     if id in editor.app.autocompleters:
       editor.autocompleter = editor.app.autocompleters[id]
+    else:
+      if editor.buffer.language.make_autocompleter != nil:
+        let autocompleter = editor.buffer.language.make_autocompleter()
+        editor.app.autocompleters[id] = autocompleter
+        editor.autocompleter = autocompleter
+        autocompleter.track(editor.buffer)
 
 proc select_all(editor: Editor) =
   editor.cursors = @[Cursor(
