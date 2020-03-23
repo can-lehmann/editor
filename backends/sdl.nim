@@ -250,6 +250,24 @@ proc update(term: Terminal): bool =
               key = key.add_modifiers(term) 
               key.ctrl = true
               term.key_queue.add_last(key)
+          of SDL_SCANCODE_F1:
+            term.key_queue.add_last(Key(kind: KeyFn, fn: 1).add_modifiers(term))
+          of SDL_SCANCODE_F2:
+            term.key_queue.add_last(Key(kind: KeyFn, fn: 2).add_modifiers(term))
+          of SDL_SCANCODE_F3:
+            term.key_queue.add_last(Key(kind: KeyFn, fn: 3).add_modifiers(term))
+          of SDL_SCANCODE_F4:
+            term.key_queue.add_last(Key(kind: KeyFn, fn: 4).add_modifiers(term))
+          of SDL_SCANCODE_F5:
+            term.key_queue.add_last(Key(kind: KeyFn, fn: 5).add_modifiers(term))
+          of SDL_SCANCODE_F6:
+            term.key_queue.add_last(Key(kind: KeyFn, fn: 6).add_modifiers(term))
+          of SDL_SCANCODE_F7:
+            term.key_queue.add_last(Key(kind: KeyFn, fn: 7).add_modifiers(term))
+          of SDL_SCANCODE_F8:
+            term.key_queue.add_last(Key(kind: KeyFn, fn: 8).add_modifiers(term))
+          of SDL_SCANCODE_F9:
+            term.key_queue.add_last(Key(kind: KeyFn, fn: 9).add_modifiers(term))
           of SDL_SCANCODE_F11:
             term.is_fullscreen = not term.is_fullscreen
             if term.is_fullscreen:

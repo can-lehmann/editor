@@ -140,7 +140,11 @@ method poll(ctx: Context) =
       break
     for fd in fds:
       let job = ctx.jobs[fd.fd].addr
-      let data = job.socket.recv(512)
+      var data = ""
+      try:
+        data = job.socket.recv(512)
+      except OSError:
+        discard
       if data == "":
         ctx.selector.unregister(job.socket.get_fd())
         job.socket.close()
