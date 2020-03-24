@@ -58,11 +58,21 @@ type
     shown_files: seq[FileEntry]
     list: List
   
+  # FindDef
+  FindDef = ref object
+    entry: Entry
+    shown_defs: seq[Definition]
+    defs: seq[Definition]
+    list: List
+    editor: Editor
+  
   # Dialog
-  DialogKind = enum DialogNone, DialogQuickOpen
+  DialogKind = enum DialogNone, DialogQuickOpen, DialogFindDef
   Dialog = object
     case kind: DialogKind:
       of DialogNone: discard
+      of DialogFindDef:
+        find_def: FindDef
       of DialogQuickOpen:
         quick_open: QuickOpen
   
@@ -196,22 +206,117 @@ proc make_quick_open(app: App): owned QuickOpen =
     list: make_list(files.map(entry => entry.display_name()))
   )
 
+# Dialog / Find Def
+proc `$`(def_kind: DefKind): string =
+  case def_kind:
+    of DefMethod: return "method"
+    of DefProc: return "proc"
+    of DefFunc: return "func"
+    of DefMacro: return "macro"
+    of DefConverter: return "converter"
+    of DefTemplate: return "template"
+    of DefVar: return "var"
+    of DefLet: return "let"
+    of DefConst: return "const"
+    of DefIterator: return "iterator"
+    of DefField: return "field"
+    of DefType: return "type" 
+    of DefUnknown: return "unknwon"
+
+proc update_list(find_def: FindDef) =
+  find_def.shown_defs = find_def.defs.filter(def =>
+    ($find_def.entry.text).to_lower() in ($def.name).to_lower())
+  
+  let kind_width = find_def.shown_defs
+    .map(def => len($def.kind))
+    .foldl(max(a, b), 0)
+
+  find_def.list.items = find_def.shown_defs.map(def =>
+    to_runes(strutils.align_left($def.kind, kind_width + 1)) & def.name)
+  
+  if find_def.list.selected >= find_def.list.items.len:
+    find_def.list.selected = find_def.list.items.len - 1
+  
+  if find_def.list.selected < 0:
+    find_def.list.selected = 0
+
+proc process_mouse(find_def: FindDef, editor: Editor, mouse: Mouse): bool =
+  let sidebar_width = len("Search:")
+  if mouse.x < sidebar_width and mouse.y == 0:  
+    return true
+
+proc jump(editor: Editor, to: int)
+proc process_key(find_def: FindDef, editor: Editor, key: Key) =
+  case key.kind:
+    of KeyArrowUp, KeyArrowDown:
+      find_def.list.process_key(key)
+    of KeyReturn:
+      if find_def.list.selected < 0 or
+         find_def.list.selected >= find_def.shown_defs.len:
+        return
+      let
+        def = find_def.shown_defs[find_def.list.selected]
+        pos = editor.buffer.to_index(def.pos)
+      editor.jump(pos)
+      editor.dialog = Dialog(kind: DialogNone)
+    else:
+      find_def.entry.process_key(key)
+      find_def.update_list()
+
+proc render(find_def: FindDef, box: Box, ren: var TermRenderer) =
+  let sidebar_width = len("Search:")
+  render_border("Find Definition", sidebar_width, box, ren)
+  find_def.list.render(Box(
+    min: box.min + Index2d(x: sidebar_width + 1, y: 2),
+    max: box.max
+  ), ren)
+  ren.move_to(box.min + Index2d(y: 1))
+  ren.put("Search:",
+    fg=Color(base: ColorBlack),
+    bg=Color(base: ColorWhite)
+  )
+  ren.move_to(box.min + Index2d(x: sidebar_width + 1, y: 1))
+  find_def.entry.render(ren)
+
+proc set_defs(find_def: FindDef, defs: seq[Definition]) =
+  find_def.defs = defs
+  find_def.update_list()
+
+proc make_find_def(editor: Editor): FindDef =
+  let find_def = FindDef(
+    entry: editor.app.copy_buffer.make_entry(),
+    list: make_list(),
+    editor: editor
+  )
+  if editor.autocompleter != nil:
+    editor.autocompleter.list_defs(
+      editor.buffer,
+      (defs: seq[Definition]) => find_def.set_defs(defs)
+    )
+  return find_def
+
 # Dialog
 proc process_key(dialog: Dialog, editor: Editor, key: Key) =
   case dialog.kind:
     of DialogNone: discard
     of DialogQuickOpen: dialog.quick_open.process_key(editor, key)
+    of DialogFindDef: dialog.find_def.process_key(editor, key)
 
 proc process_mouse(dialog: Dialog, editor: Editor, mouse: Mouse): bool =
   case dialog.kind:
     of DialogNone: discard
-    of DialogQuickOpen: return dialog.quick_open.process_mouse(editor, mouse)
+    of DialogQuickOpen:
+      return dialog.quick_open.process_mouse(editor, mouse)
+    of DialogFinddef:
+      return dialog.find_def.process_mouse(editor, mouse)
 
 proc render(dialog: Dialog, box: Box, ren: var TermRenderer) =
   case dialog.kind:
     of DialogNone: discard
     of DialogQuickOpen:
       dialog.quick_open.render(box, ren)
+    of DialogFindDef:
+      dialog.find_def.render(box, ren)
 
 # Prompt
 proc compute_size(prompt: Prompt): int =
@@ -579,6 +684,12 @@ proc show_quick_open(editor: Editor) =
     quick_open: make_quick_open(editor.app)
   )
 
+proc show_find_def(editor: Editor) =
+  editor.dialog = Dialog(
+    kind: DialogFindDef,
+    find_def: make_find_def(editor)
+  )
+
 proc only_primary_cursor(editor: Editor) =
   var cur = editor.primary_cursor()
   editor.cursors = @[cur]
@@ -755,7 +866,7 @@ method process_key(editor: Editor, key: Key) =
           of Rune('t'): editor.show_quick_open()
           of Rune('s'): editor.save()
           of Rune('n'): editor.new_buffer()
-          of Rune('r'): editor.show_replace()
+          of Rune('r'): editor.show_find_def()
           of Rune('f'): editor.show_find()
           of Rune('g'): editor.show_goto()
           of Rune('v'): editor.paste()
@@ -818,6 +929,11 @@ method list_commands(editor: Editor): seq[Command] =
       cmd: () => editor.show_quick_open()
     ),
     Command(
+      name: "Find Definition",
+      shortcut: @[Key(kind: KeyChar, ctrl: true, chr: Rune('r'))],
+      cmd: () => editor.show_find_def()
+    ),
+    Command(
       name: "Save",
       shortcut: @[Key(kind: KeyChar, ctrl: true, chr: Rune('s'))],
       cmd: () => editor.save()
@@ -829,7 +945,7 @@ method list_commands(editor: Editor): seq[Command] =
     ),
     Command(
       name: "Find and Replace",
-      shortcut: @[Key(kind: KeyChar, ctrl: true, chr: Rune('r'))],
+      shortcut: @[],
       cmd: () => editor.show_replace()
     ),
     Command(

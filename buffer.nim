@@ -24,6 +24,18 @@ import strutils, unicode, sequtils, sugar, tables
 import utils, highlight/highlight
 
 type
+  DefKind* = enum
+    DefUnknown
+    DefLet, DefConst, DefVar,
+    DefProc, DefMethod, DefTemplate, DefFunc,
+    DefMacro, DefIterator, DefConverter,
+    DefType, DefField
+    
+  Definition* = object
+    kind*: DefKind
+    name*: seq[Rune]
+    pos*: Index2d
+
   CompKind* = enum
     CompUnknown,
     CompMod,
@@ -92,6 +104,11 @@ method poll*(ctx: Autocompleter) {.base.} =
 
 method close*(ctx: Autocompleter) {.base.} =
   quit "Abstract method close"
+
+method list_defs*(ctx: Autocompleter,
+                  buffer: Buffer,
+                  callback: proc (defs: seq[Definition])) {.base.} =
+  quit "Abstract methods list_defs"
 
 proc search*(comps: seq[Completion], query: seq[Rune]): seq[Completion] =
   comps.filter(comp => comp.text.find(query) != -1)

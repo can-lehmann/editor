@@ -26,13 +26,17 @@ import "../buffer", "../utils"
 
 type
   CompCallback = proc (comps: seq[Completion])
+  DefsCallback = proc (defs: seq[Definition])
 
+  JobKind = enum JobDefs, JobComp
   Job = object
-    callback: CompCallback
     path: string
     socket: Socket
     data: string
-
+    case kind: JobKind:
+      of JobDefs: defs_callback: DefsCallback
+      of JobComp: comp_callback: CompCallback
+    
   Context = ref ContextObj
   ContextObj = object of Autocompleter
     nimsuggest: Process
@@ -69,20 +73,21 @@ proc make_context(): Context =
   )
   result.folder = create_temp_folder(result.gen)
 
-proc send_command(ctx: Context, command: string) =
+proc send_command(ctx: Context, command: string): Socket =
+  let socket = new_socket()
   try:
-    let socket = new_socket()
     socket.connect("localhost", ctx.port)
     socket.send(command & "\n")
+    return socket
   except OSError:
-    discard
+    return nil
 
 method close(ctx: Context) =
   ctx.poll()
   
   if ctx.nimsuggest != nil:
     try:
-      ctx.send_command("quit")
+      discard ctx.send_command("quit")
       discard ctx.nimsuggest.wait_for_exit(timeout=1000)
       ctx.nimsuggest.close()
     except OSError as e:
@@ -113,20 +118,60 @@ proc to_comp_kind(str: string): CompKind =
     of "skFunc": return CompFunc
     else: return CompUnknown
 
+proc to_def_kind(str: string): DefKind =
+  case str:
+    of "skUnknown": return DefUnknown
+    of "skProc": return DefProc
+    of "skMethod": return DefMethod
+    of "skIterator": return DefIterator
+    of "skTemplate": return DefTemplate
+    of "skVar": return DefVar
+    of "skLet": return DefLet
+    of "skConst": return DefConst
+    of "skType": return DefType
+    of "skField": return DefField
+    of "skMacro": return DefMacro
+    of "skConverter": return DefConverter
+    of "skFunc": return DefFunc
+    else: return DefUnknown
+
 proc execute(job: Job) =
-  var comps: seq[Completion] = @[]
-  for line in job.data.split('\n'):
-    if line.len == 0:
-      continue
-    let values = line.split('\t')
-    if values.len < 3:
-      continue
-    comps.add(Completion(
-      text: values[2].split('.')[^1].to_runes(),
-      kind: values[1].to_comp_kind()
-    ))
-  
-  job.callback(comps)
+  case job.kind:
+    of JobComp:
+      var comps: seq[Completion] = @[]
+      for line in job.data.split('\n'):
+        if line.len == 0:
+          continue
+        let values = line.split('\t')
+        if values.len < 3:
+          continue
+        comps.add(Completion(
+          text: values[2].split('.')[^1].to_runes(),
+          kind: values[1].to_comp_kind()
+        ))
+      
+      job.comp_callback(comps)
+    of JobDefs:
+      var defs: seq[Definition] = @[]
+      for line in job.data.split('\n'):
+        if line.len == 0:
+          continue
+        let values = line.split('\t')
+        if values.len < 7:
+          continue
+        
+        try:
+          defs.add(Definition(
+            kind: to_def_kind(values[1]),
+            name: to_runes(values[2].split('.')[1.. ^1].join(".")),
+            pos: Index2d(
+              x: values[6].parse_int(),
+              y: values[5].parse_int() - 1
+            )
+          ))
+        except ValueError:
+          discard
+      job.defs_callback(defs)
   remove_file(job.path)
 
 method poll(ctx: Context) =
@@ -162,7 +207,17 @@ method track(ctx: Context, buffer: Buffer) =
     ctx.proc_selector.register(ctx.nimsuggest.output_handle.int, {Event.Read}, nil)
   else:
     ctx.poll()
-    ctx.send_command("mod " & buffer.file_path)
+    discard ctx.send_command("mod " & buffer.file_path)
+
+proc save_temp(ctx: Context, buffer: Buffer): string =
+  try:
+    let 
+      file_name = $get_time().to_unix() & "_" & $ctx.gen.next() & ".nim"
+      tmp_path = ctx.folder / file_name
+    write_file(tmp_path, $buffer.text)
+    return tmp_path
+  except IOError:
+    return
 
 method complete(ctx: Context,
                 buffer: Buffer,
@@ -170,36 +225,52 @@ method complete(ctx: Context,
                 trigger: Rune,
                 callback: CompCallback) =
   if ctx.nimsuggest == nil:
-    discard
+    return
   
   ctx.poll()
   
-  var tmp_path: string
-  try:
-    let 
-      file_name = $get_time().to_unix() & "_" & $ctx.gen.next() & ".nim"
-    tmp_path = ctx.folder / file_name
-    write_file(tmp_path, $buffer.text)
-  except IOError:
+  let tmp_path = ctx.save_temp(buffer)
+  if tmp_path.len == 0:
     return
   
   let
     index = buffer.to_2d(pos)
-    cmd = "sug " & buffer.file_name & ";" & tmp_path & ":" & $(index.y + 1) & ":" & $(index.x)
+    socket = ctx.send_command(
+      "sug " & buffer.file_name & ";" & tmp_path & ":" & $(index.y + 1) & ":" & $(index.x)
+    )
+  if socket == nil:
+    return
 
-  let socket = new_socket()
-  try:
-    socket.connect("localhost", ctx.port)
-    socket.send(cmd & "\n")
-  except OSError:
-    discard
-
-  ctx.jobs[socket.get_fd().int] = Job(
-    callback: callback,
+  ctx.jobs[socket.get_fd().int] = Job(kind: JobComp,
+    comp_callback: callback,
     path: tmp_path,
     socket: socket
   )
   ctx.selector.register_handle(socket.get_fd(), {Event.Read}, nil)
   
+method list_defs(ctx: Context,
+                 buffer: Buffer,
+                 callback: DefsCallback) =
+  if ctx.nimsuggest == nil:
+    return
+  
+  ctx.poll()
+  
+  let tmp_path = ctx.save_temp(buffer)
+  if tmp_path.len == 0:
+    return
+  
+  let socket = ctx.send_command(
+    "outline " & buffer.file_name & ";" & tmp_path
+  )
+  if socket == nil:
+    return
+
+  ctx.jobs[socket.get_fd().int] = Job(kind: JobDefs,
+    defs_callback: callback,
+    path: tmp_path,
+    socket: socket
+  )
+  ctx.selector.register_handle(socket.get_fd(), {Event.Read}, nil)
 
 proc make_nim_autocompleter*(): Autocompleter = make_context()

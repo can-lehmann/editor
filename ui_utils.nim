@@ -299,6 +299,9 @@ proc make_list*(items: seq[seq[Rune]]): List =
 proc make_list*(items: seq[string]): List =
   make_list(items.map(to_runes))
 
+proc make_list*(): List =
+  List(view: 0, selected: 0)
+
 proc process_mouse*(list: var List, mouse: Mouse): bool =
   case mouse.kind:
     of MouseScroll:

@@ -29,12 +29,17 @@ nim compile -r -o:main-sdl --opt:speed -d:sdl_backend main.nim
 - `Ctrl + W`: Close active window
 - `Ctrl + Q`: Quit
 
+- `F1`: Search command
+- `F2`: Show autocomplete
+
 ### Editor
 - `Ctrl + N`: New
 - `Ctrl + T`: Quick Open
 - `Ctrl + S`: Save
 
+- `Ctrl + R`: Find definition
 - `Ctrl + F`: Find
+- `Ctrl + G`: Go to line
 - `Ctrl + E`: Close active prompt
 
 - `Ctrl + C`: Copy
