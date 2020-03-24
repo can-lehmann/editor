@@ -20,15 +20,26 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import osproc, unicode, strutils, sequtils, sugar
-import net, times, os, streams, random, selectors, tables
+import osproc, unicode, strutils, sequtils, sugar, sets, deques
+import net, times, os, streams, random, selectors, tables, hashes
 import "../buffer", "../utils"
 
 type
   CompCallback = proc (comps: seq[Completion])
   DefsCallback = proc (defs: seq[Definition])
 
-  JobKind = enum JobDefs, JobComp
+  JobKind = enum JobDefs, JobComp, JobTrack
+  
+  WaitingJob = object
+    buffer: Buffer
+    case kind: JobKind:
+      of JobTrack: discard
+      of JobComp:
+        pos: int
+        comp_callback: CompCallback
+      of JobDefs:
+        defs_callback: DefsCallback
+  
   Job = object
     path: string
     socket: Socket
@@ -36,6 +47,7 @@ type
     case kind: JobKind:
       of JobDefs: defs_callback: DefsCallback
       of JobComp: comp_callback: CompCallback
+      else: discard
     
   Context = ref ContextObj
   ContextObj = object of Autocompleter
@@ -46,59 +58,11 @@ type
     proc_selector: Selector[pointer]
     jobs: Table[int, Job]
     folder: string
+    waiting: Deque[WaitingJob]
+    tracked: HashSet[Buffer]
 
-proc create_temp_folder(gen: var Rand): string =
-  var name = ".temp" & $gen.next()
-  while exists_dir(name):
-    name &= $get_time().to_unix()
-  create_dir(name)
-  return name
-
-proc make_context(): Context =
-  result = Context(
-    triggers: @[
-      Rune('.'), Rune('(')
-    ],
-    finish: @[
-      Rune(' '), Rune('\n'), Rune('\r'), Rune('\t'),
-      Rune('+'), Rune('-'), Rune('*'), Rune('/'),
-      Rune(','), Rune(';'),
-      Rune('='), Rune('>'), Rune('<'),
-      Rune('@'),
-      Rune(')'), Rune('}'), Rune('['), Rune(']'), Rune('{')
-    ],
-    nimsuggest: nil,
-    selector: new_selector[pointer](),
-    gen: init_rand(get_time().to_unix()),
-  )
-  result.folder = create_temp_folder(result.gen)
-
-proc send_command(ctx: Context, command: string): Socket =
-  let socket = new_socket()
-  try:
-    socket.connect("localhost", ctx.port)
-    socket.send(command & "\n")
-    return socket
-  except OSError:
-    return nil
-
-method close(ctx: Context) =
-  ctx.poll()
-  
-  if ctx.nimsuggest != nil:
-    try:
-      discard ctx.send_command("quit")
-      discard ctx.nimsuggest.wait_for_exit(timeout=1000)
-      ctx.nimsuggest.close()
-    except OSError as e:
-      echo "OSError"
-
-  remove_dir(ctx.folder)
-
-proc find_nimsuggest(): string =
-  let nimble_path = get_home_dir() / ".nimble" / "bin" / "nimsuggest"
-  if file_exists(nimble_path):  
-    return nimble_path
+proc hash(buffer: Buffer): Hash =
+  return buffer.file_path.hash()
 
 proc to_comp_kind(str: string): CompKind =
   case str:
@@ -134,6 +98,85 @@ proc to_def_kind(str: string): DefKind =
     of "skConverter": return DefConverter
     of "skFunc": return DefFunc
     else: return DefUnknown
+
+proc create_temp_folder(gen: var Rand): string =
+  var name = ".temp" & $gen.next()
+  while exists_dir(name):
+    name &= $get_time().to_unix()
+  create_dir(name)
+  return name
+
+proc make_context(): Context =
+  result = Context(
+    triggers: @[
+      Rune('.'), Rune('(')
+    ],
+    finish: @[
+      Rune(' '), Rune('\n'), Rune('\r'), Rune('\t'),
+      Rune('+'), Rune('-'), Rune('*'), Rune('/'),
+      Rune(','), Rune(';'),
+      Rune('='), Rune('>'), Rune('<'),
+      Rune('@'),
+      Rune(')'), Rune('}'), Rune('['), Rune(']'), Rune('{')
+    ],
+    nimsuggest: nil,
+    selector: new_selector[pointer](),
+    proc_selector: new_selector[pointer](),
+    gen: init_rand(get_time().to_unix()),
+  )
+  result.folder = create_temp_folder(result.gen)
+
+proc find_nimsuggest(): string =
+  let nimble_path = get_home_dir() / ".nimble" / "bin" / "nimsuggest"
+  if file_exists(nimble_path):  
+    return nimble_path
+
+proc restart_nimsuggest(ctx: Context) =
+  let path = find_nimsuggest()
+  if path.len == 0:
+    return
+  if ctx.tracked.len == 0:
+    return
+  let buffer = ctx.tracked.pop()
+  ctx.nimsuggest = start_process(path, args=["--address:127.0.0.1", "--autobind", buffer.file_path])
+  ctx.proc_selector = new_selector[pointer]()
+  ctx.proc_selector.register(ctx.nimsuggest.output_handle.int, {Event.Read}, nil)
+  
+  for buf in ctx.tracked:
+    ctx.waiting.add_first(WaitingJob(
+      kind: JobTrack,
+      buffer: buf
+    ))
+  
+  ctx.tracked.incl(buffer)
+
+proc send_command(ctx: Context, command: string): Socket =
+  let socket = new_socket()
+  try:
+    socket.connect("localhost", ctx.port)
+    socket.send(command & "\n")
+    return socket
+  except OSError:
+    if not ctx.nimsuggest.running:
+      ctx.proc_selector.unregister(ctx.nimsuggest.output_handle.int)
+      ctx.nimsuggest.close()
+      ctx.nimsuggest = nil
+      ctx.port = Port(0)
+      ctx.restart_nimsuggest()
+    return nil
+
+method close(ctx: Context) =
+  ctx.poll()
+  
+  if ctx.nimsuggest != nil:
+    try:
+      discard ctx.send_command("quit")
+      discard ctx.nimsuggest.wait_for_exit(timeout=1000)
+      ctx.nimsuggest.close()
+    except OSError as e:
+      echo "OSError"
+
+  remove_dir(ctx.folder)
 
 proc execute(job: Job) =
   case job.kind:
@@ -172,12 +215,77 @@ proc execute(job: Job) =
         except ValueError:
           discard
       job.defs_callback(defs)
+    else: discard
   remove_file(job.path)
+
+proc save_temp(ctx: Context, buffer: Buffer): string =
+  try:
+    let 
+      file_name = $get_time().to_unix() & "_" & $ctx.gen.next() & ".nim"
+      tmp_path = ctx.folder / file_name
+    write_file(tmp_path, $buffer.text)
+    return tmp_path
+  except IOError:
+    return
+
+proc execute(ctx: Context, job: WaitingJob) =
+  case job.kind:
+    of JobTrack:
+      echo "Track: ", job.buffer.file_path
+      discard ctx.send_command("mod " & job.buffer.file_path)
+    of JobComp:
+      let tmp_path = ctx.save_temp(job.buffer)
+      if tmp_path.len == 0:
+        return
+  
+      let
+        index = job.buffer.to_2d(job.pos)
+        socket = ctx.send_command(
+          "sug " & job.buffer.file_name & ";" & tmp_path & ":" & $(index.y + 1) & ":" & $(index.x)
+        )
+      if socket == nil:
+        ctx.waiting.add_last(job)
+        return
+      
+      ctx.jobs[socket.get_fd().int] = Job(kind: JobComp,
+        comp_callback: job.comp_callback,
+        path: tmp_path,
+        socket: socket
+      )
+      ctx.selector.register_handle(socket.get_fd(), {Event.Read}, nil)
+    of JobDefs:
+      let tmp_path = ctx.save_temp(job.buffer)
+      if tmp_path.len == 0:
+        return
+      
+      let socket = ctx.send_command(
+        "outline " & job.buffer.file_name & ";" & tmp_path
+      )
+      if socket == nil:
+        ctx.waiting.add_last(job)
+        return
+    
+      ctx.jobs[socket.get_fd().int] = Job(kind: JobDefs,
+        defs_callback: job.defs_callback,
+        path: tmp_path,
+        socket: socket
+      )
+      ctx.selector.register_handle(socket.get_fd(), {Event.Read}, nil)
 
 method poll(ctx: Context) =
   if ctx.nimsuggest != nil:
     if ctx.proc_selector.select(0).len > 0 and ctx.port == Port(0):
-      ctx.port = Port(ctx.nimsuggest.output_stream().read_line().parse_int())
+      try:
+        ctx.port = Port(ctx.nimsuggest.output_stream().read_line().parse_int())
+      except IOError:
+        ctx.nimsuggest.close()
+        ctx.nimsuggest = nil
+        ctx.port = Port(0)
+        ctx.restart_nimsuggest()
+        return
+      var jobs = ctx.waiting
+      for job in jobs:
+        ctx.execute(job)
 
   while true:
     let fds = ctx.selector.select(0)
@@ -197,80 +305,42 @@ method poll(ctx: Context) =
         ctx.jobs.del(fd.fd)
       job.data &= data
 
-method track(ctx: Context, buffer: Buffer) =
+proc try_execute(ctx: Context, job: WaitingJob) =
   if ctx.nimsuggest == nil:
-    let path = find_nimsuggest()
-    if path.len == 0:
-      return
-    ctx.nimsuggest = start_process(path, args=["--address:127.0.0.1", "--autobind", buffer.file_path])
-    ctx.proc_selector = new_selector[pointer]()
-    ctx.proc_selector.register(ctx.nimsuggest.output_handle.int, {Event.Read}, nil)
+    ctx.waiting.add_last(job)
+    ctx.restart_nimsuggest()
+    return
+  elif ctx.port == Port(0):
+    ctx.waiting.add_last(job)
+  
+  ctx.poll()
+  ctx.execute(job)
+
+method track(ctx: Context, buffer: Buffer) =
+  ctx.tracked.incl(buffer)
+  if ctx.nimsuggest == nil:
+    ctx.restart_nimsuggest()
   else:
     ctx.poll()
-    discard ctx.send_command("mod " & buffer.file_path)
-
-proc save_temp(ctx: Context, buffer: Buffer): string =
-  try:
-    let 
-      file_name = $get_time().to_unix() & "_" & $ctx.gen.next() & ".nim"
-      tmp_path = ctx.folder / file_name
-    write_file(tmp_path, $buffer.text)
-    return tmp_path
-  except IOError:
-    return
+    ctx.execute(WaitingJob(kind: JobTrack, buffer: buffer))
 
 method complete(ctx: Context,
                 buffer: Buffer,
                 pos: int,
                 trigger: Rune,
                 callback: CompCallback) =
-  if ctx.nimsuggest == nil:
-    return
-  
-  ctx.poll()
-  
-  let tmp_path = ctx.save_temp(buffer)
-  if tmp_path.len == 0:
-    return
-  
-  let
-    index = buffer.to_2d(pos)
-    socket = ctx.send_command(
-      "sug " & buffer.file_name & ";" & tmp_path & ":" & $(index.y + 1) & ":" & $(index.x)
-    )
-  if socket == nil:
-    return
+  ctx.try_execute(WaitingJob(kind: JobComp,
+    buffer: buffer,
+    pos: pos,
+    comp_callback: callback
+  ))
 
-  ctx.jobs[socket.get_fd().int] = Job(kind: JobComp,
-    comp_callback: callback,
-    path: tmp_path,
-    socket: socket
-  )
-  ctx.selector.register_handle(socket.get_fd(), {Event.Read}, nil)
-  
 method list_defs(ctx: Context,
                  buffer: Buffer,
                  callback: DefsCallback) =
-  if ctx.nimsuggest == nil:
-    return
-  
-  ctx.poll()
-  
-  let tmp_path = ctx.save_temp(buffer)
-  if tmp_path.len == 0:
-    return
-  
-  let socket = ctx.send_command(
-    "outline " & buffer.file_name & ";" & tmp_path
-  )
-  if socket == nil:
-    return
-
-  ctx.jobs[socket.get_fd().int] = Job(kind: JobDefs,
-    defs_callback: callback,
-    path: tmp_path,
-    socket: socket
-  )
-  ctx.selector.register_handle(socket.get_fd(), {Event.Read}, nil)
+  ctx.try_execute(WaitingJob(kind: JobDefs,
+    buffer: buffer,
+    defs_callback: callback
+  ))
 
 proc make_nim_autocompleter*(): Autocompleter = make_context()
