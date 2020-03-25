@@ -231,7 +231,6 @@ proc save_temp(ctx: Context, buffer: Buffer): string =
 proc execute(ctx: Context, job: WaitingJob) =
   case job.kind:
     of JobTrack:
-      echo "Track: ", job.buffer.file_path
       discard ctx.send_command("mod " & job.buffer.file_path)
     of JobComp:
       let tmp_path = ctx.save_temp(job.buffer)

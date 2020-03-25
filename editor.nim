@@ -240,25 +240,44 @@ proc update_list(find_def: FindDef) =
   if find_def.list.selected < 0:
     find_def.list.selected = 0
 
+proc jump(editor: Editor, to: int)
+proc jump_to_selected(find_def: FindDef, editor: Editor) =
+  if find_def.list.selected < 0 or
+     find_def.list.selected >= find_def.shown_defs.len:
+    return
+  let
+    def = find_def.shown_defs[find_def.list.selected]
+    pos = editor.buffer.to_index(def.pos)
+  editor.jump(pos)
+  editor.dialog = Dialog(kind: DialogNone)
+
 proc process_mouse(find_def: FindDef, editor: Editor, mouse: Mouse): bool =
   let sidebar_width = len("Search:")
   if mouse.x < sidebar_width and mouse.y == 0:  
     return true
 
-proc jump(editor: Editor, to: int)
+  var mouse_rel = mouse
+  mouse_rel.x -= sidebar_width + 1
+  mouse_rel.y -= 1
+
+  if mouse.y == 1:
+    find_def.entry.process_mouse(mouse_rel)
+    return
+  
+  mouse_rel.y -= 1
+  case mouse.kind:
+    of MouseUp:
+      if find_def.list.process_mouse(mouse_rel):
+        find_def.jump_to_selected(editor)
+    else:
+      discard find_def.list.process_mouse(mouse_rel)
+
 proc process_key(find_def: FindDef, editor: Editor, key: Key) =
   case key.kind:
     of KeyArrowUp, KeyArrowDown:
       find_def.list.process_key(key)
     of KeyReturn:
-      if find_def.list.selected < 0 or
-         find_def.list.selected >= find_def.shown_defs.len:
-        return
-      let
-        def = find_def.shown_defs[find_def.list.selected]
-        pos = editor.buffer.to_index(def.pos)
-      editor.jump(pos)
-      editor.dialog = Dialog(kind: DialogNone)
+      find_def.jump_to_selected(editor)
     else:
       find_def.entry.process_key(key)
       find_def.update_list()
