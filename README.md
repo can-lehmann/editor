@@ -30,7 +30,6 @@ nim compile -r -o:main-sdl --opt:speed -d:sdl_backend main.nim
 - `Ctrl + Q`: Quit
 
 - `F1`: Search command
-- `F2`: Show autocomplete
 
 ### Editor
 - `Ctrl + N`: New
@@ -46,6 +45,7 @@ nim compile -r -o:main-sdl --opt:speed -d:sdl_backend main.nim
 - `Ctrl + X`: Cut
 - `Ctrl + V`: Paste
 
+- `F2`: Show autocomplete
 - `Tab`: Autocomplete word / Indent
 - `Shift + Tab`: Unindent
 

@@ -50,7 +50,8 @@ const
     "float", "float64", "float32",
     "array", "string", "seq", "set", "tuple",
     "bool", "char", "auto", "pointer",
-    "cint", "cshort", "cstring",
+    "cint", "cshort", "cstring", "clong",
+    "cuint", "culong", "cushort",
     "openArray", "Table", "Deque", "HashSet"
   ]
 
@@ -104,7 +105,7 @@ method next*(state: State, text: seq[Rune]): Token =
           it += 1
         let state = State(it: it + 1)
         return Token(kind: TokenComment, start: start, stop: it, state: state)
-    of ':', '<', '>', '[', ']', '(', ')', '{', '}', ',', ';', '=', '`':
+    of ':', '<', '>', '[', ']', '(', ')', '{', '}', ',', ';', '=', '`', '.':
       let state = State(it: start + 1)
       return Token(kind: TokenUnknown, start: start, stop: start + 1, state: state)
     else:
@@ -116,7 +117,7 @@ method next*(state: State, text: seq[Rune]): Token =
         case chr:
           of ' ', '\t', '\n', '\r', ':', '<', '>',
              '[', ']', '(', ')', '{', '}', ',', ';',
-             '=', '`', '\"', '#', '\'':
+             '=', '`', '\"', '#', '\'', '.':
             break
           else:
             name.add(chr)

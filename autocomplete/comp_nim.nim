@@ -276,7 +276,7 @@ method poll(ctx: Context) =
     if ctx.proc_selector.select(0).len > 0 and ctx.port == Port(0):
       try:
         ctx.port = Port(ctx.nimsuggest.output_stream().read_line().parse_int())
-      except IOError:
+      except IOError, ValueError:
         ctx.nimsuggest.close()
         ctx.nimsuggest = nil
         ctx.port = Port(0)
