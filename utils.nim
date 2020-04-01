@@ -90,4 +90,21 @@ proc join*(strs: seq[seq[Rune]], chr: Rune): seq[Rune] =
       result.add(chr)
     result &= str
 
+proc join*(strs: seq[seq[Rune]]): seq[Rune] =
+  for str in strs:
+    result &= str
+
+proc split*(str: seq[Rune], delimiter: Rune): seq[seq[Rune]] =
+  result.add(@[])
+  for chr in str:
+    if chr == delimiter:
+      result.add(@[])
+    else:
+      result[^1].add(chr)
+
+proc capitalize*(str: seq[Rune]): seq[Rune] =
+  if str.len == 0:
+    return str
+  return @[str[0].to_upper()] & str[1..^1]
+
 converter to_rune*(chr: char): Rune = Rune(chr)

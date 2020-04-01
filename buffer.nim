@@ -51,6 +51,7 @@ type
   Autocompleter* = ref object of RootObj
     triggers*: seq[Rune]
     finish*: seq[Rune]
+    min_word_len*: int
 
   Language* = ref object
     id*: int
@@ -109,6 +110,8 @@ method list_defs*(ctx: Autocompleter,
                   buffer: Buffer,
                   callback: proc (defs: seq[Definition])) {.base.} =
   quit "Abstract methods list_defs"
+
+method buffer_info*(ctx: Autocompleter, buffer: Buffer): seq[string] {.base.} = @[]
 
 proc search*(comps: seq[Completion], query: seq[Rune]): seq[Completion] =
   comps.filter(comp => comp.text.find(query) != -1)

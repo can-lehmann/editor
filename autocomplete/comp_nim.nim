@@ -25,6 +25,8 @@ import net, times, os, streams, random, selectors, tables, hashes
 import "../buffer", "../utils"
 
 type
+  CaseStyle = enum CaseUnknown, CaseCamel, CaseSnake, CasePascal
+
   CompCallback = proc (comps: seq[Completion])
   DefsCallback = proc (defs: seq[Definition])
 
@@ -46,7 +48,9 @@ type
     data: string
     case kind: JobKind:
       of JobDefs: defs_callback: DefsCallback
-      of JobComp: comp_callback: CompCallback
+      of JobComp:
+        case_style: CaseStyle
+        comp_callback: CompCallback
       else: discard
     
   Context = ref ContextObj
@@ -60,9 +64,52 @@ type
     folder: string
     waiting: Deque[WaitingJob]
     tracked: HashSet[Buffer]
+    case_styles: Table[Buffer, CaseStyle]
 
 proc hash(buffer: Buffer): Hash =
   return buffer.file_path.hash()
+
+proc case_style(name: seq[Rune]): CaseStyle =
+  for it, chr in name:
+    if chr == '_':
+      return CaseSnake
+    elif chr.is_upper():
+      if it == 0:
+        return CasePascal
+      else:
+        return CaseCamel
+  return CaseUnknown
+
+proc convert_case(name: seq[Rune], from_style, to_style: CaseStyle): seq[Rune] =
+  if from_style == to_style:
+    return name
+
+  var parts: seq[seq[Rune]] = @[]
+  case from_style:
+    of CaseUnknown:
+      return name
+    of CaseSnake:
+      parts = name.split('_')
+    of CaseCamel, CasePascal:
+      parts.add(@[])
+      for it, chr in name:
+        if chr.is_upper():
+          if it == 0:
+            parts[^1].add(chr.to_lower())
+          else:
+            parts.add(@[chr.to_lower()])
+        else:
+          parts[^1].add(chr)
+  
+  case to_style:
+    of CaseUnknown:
+      return name
+    of CaseSnake:
+      return parts.join('_')
+    of CaseCamel:
+      return (@[parts[0]] & parts[1..^1].map(part => part.capitalize)).join()
+    of CasePascal:
+      return parts.map(part => part.capitalize).join()
 
 proc to_comp_kind(str: string): CompKind =
   case str:
@@ -109,7 +156,7 @@ proc create_temp_folder(gen: var Rand): string =
 proc make_context(): Context =
   result = Context(
     triggers: @[
-      Rune('.'), Rune('(')
+      Rune('.'), Rune('('), Rune('[')
     ],
     finish: @[
       Rune(' '), Rune('\n'), Rune('\r'), Rune('\t'),
@@ -117,19 +164,18 @@ proc make_context(): Context =
       Rune(','), Rune(';'),
       Rune('='), Rune('>'), Rune('<'),
       Rune('@'),
-      Rune(')'), Rune('}'), Rune('['), Rune(']'), Rune('{')
+      Rune(')'), Rune('}'), Rune(']'), Rune('{')
     ],
     nimsuggest: nil,
     selector: new_selector[pointer](),
     proc_selector: new_selector[pointer](),
     gen: init_rand(get_time().to_unix()),
+    min_word_len: 5
   )
   result.folder = create_temp_folder(result.gen)
 
 proc find_nimsuggest(): string =
-  let nimble_path = get_home_dir() / ".nimble" / "bin" / "nimsuggest"
-  if file_exists(nimble_path):  
-    return nimble_path
+  return find_exe("nimsuggest")
 
 proc restart_nimsuggest(ctx: Context) =
   let path = find_nimsuggest()
@@ -188,8 +234,12 @@ proc execute(job: Job) =
         let values = line.split('\t')
         if values.len < 3:
           continue
+        var text = values[2].split('.')[^1].to_runes()
+        let text_case = text.case_style()
+        if text_case == CaseSnake or text_case == CaseCamel:
+          text = text.convert_case(text_case, job.case_style)
         comps.add(Completion(
-          text: values[2].split('.')[^1].to_runes(),
+          text: text,
           kind: values[1].to_comp_kind()
         ))
       
@@ -246,10 +296,15 @@ proc execute(ctx: Context, job: WaitingJob) =
         ctx.waiting.add_last(job)
         return
       
+      var case_style = CaseUnknown
+      if job.buffer in ctx.case_styles:
+        case_style = ctx.case_styles[job.buffer]
+      
       ctx.jobs[socket.get_fd().int] = Job(kind: JobComp,
         comp_callback: job.comp_callback,
         path: tmp_path,
-        socket: socket
+        socket: socket,
+        case_style: case_style
       )
       ctx.selector.register_handle(socket.get_fd(), {Event.Read}, nil)
     of JobDefs:
@@ -322,6 +377,17 @@ method track(ctx: Context, buffer: Buffer) =
   else:
     ctx.poll()
     ctx.execute(WaitingJob(kind: JobTrack, buffer: buffer))
+  ctx.try_execute(WaitingJob(kind: JobDefs,
+    buffer: buffer,
+    defs_callback: proc (defs: seq[Definition]) =
+      var style_counts: array[CaseStyle, int]
+      for def in defs:
+         style_counts[def.name.case_style()] += 1
+      if style_counts[CaseCamel] < style_counts[CaseSnake]:
+        ctx.case_styles[buffer] = CaseSnake
+      else:
+        ctx.case_styles[buffer] = CaseCamel
+  ))
 
 method complete(ctx: Context,
                 buffer: Buffer,
@@ -341,5 +407,12 @@ method list_defs(ctx: Context,
     buffer: buffer,
     defs_callback: callback
   ))
+
+method buffer_info(ctx: Context, buffer: Buffer): seq[string] =
+  case ctx.case_styles[buffer]:
+    of CaseUnknown: return @["Unknown Case"]
+    of CaseCamel: return @["Camel Case"]
+    of CaseSnake: return @["Snake Case"]
+    of CasePascal: return @["Pascal Case"]
 
 proc make_nim_autocompleter*(): Autocompleter = make_context()

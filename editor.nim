@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import sequtils, strutils, os, sugar, streams, deques
+import sequtils, strutils, os, sugar, streams, deques, times
 import unicode, sets, hashes, tables, algorithm
 import utils, ui_utils, termdiff, highlight/highlight
 import buffer, window_manager
@@ -90,6 +90,7 @@ type
     window_size: Index2d
     autocompleter: Autocompleter
     completions: seq[Completion]
+    completion_time: Time
 
 # Dialog / QuickOpen
 proc `<`(a, b: FileEntry): bool = a.name < b.name
@@ -443,6 +444,7 @@ proc jump(editor: Editor, to: int) =
   editor.jump_stack.add(editor.primary_cursor().get_pos())
   editor.cursors = @[Cursor(kind: CursorInsert, pos: to)]
   editor.completions = @[]
+  editor.completion_time = get_time()
 
 proc goto_line(editor: Editor, inputs: seq[seq[Rune]]) =
   var line: int
@@ -713,6 +715,19 @@ proc only_primary_cursor(editor: Editor) =
   var cur = editor.primary_cursor()
   editor.cursors = @[cur]
 
+proc trigger_autocomplete(editor: Editor, chr: Rune) =
+  let 
+    pos = editor.primary_cursor().get_pos()
+    start_time = get_time()
+  editor.autocompleter.complete(
+    editor.buffer, pos, chr,
+    proc (comps: seq[Completion]) =
+      if editor.completion_time > start_time:
+        return
+      editor.completions = comps
+      editor.completion_time = start_time
+  )
+
 method process_key(editor: Editor, key: Key) = 
   if editor.autocompleter != nil:
     editor.autocompleter.poll()
@@ -727,6 +742,7 @@ method process_key(editor: Editor, key: Key) =
       editor.hide_prompt()
     else:
       editor.completions = @[]
+      editor.completion_time = get_time()
     return
 
   if editor.dialog.kind != DialogNone:
@@ -864,12 +880,19 @@ method process_key(editor: Editor, key: Key) =
               let
                 text = comps[0].text
                 query = editor.completion_query()
-              editor.insert(text[query.len..<text.len])
+              for cursor in editor.cursors:
+                if cursor.kind != CursorInsert:
+                  continue
+                editor.buffer.delete(cursor.pos - query.len, cursor.pos)
+                editor.buffer.insert(cursor.pos - query.len, text)
             else:
               for cursor in editor.cursors:
                 case cursor.kind:
                   of CursorInsert:  
-                    editor.buffer.insert(cursor.pos, sequtils.repeat(Rune(' '), editor.buffer.indent_width))
+                    editor.buffer.insert(cursor.pos, sequtils.repeat(
+                      Rune(' '),
+                      editor.buffer.indent_width
+                    ))
                   of CursorSelection:
                     let cur = cursor.sort()
                     editor.buffer.indent(cur.start, cur.stop)
@@ -902,27 +925,24 @@ method process_key(editor: Editor, key: Key) =
         clear_completions = false
         if editor.autocompleter != nil:
           if key.chr in editor.autocompleter.triggers:
-            let pos = editor.primary_cursor().get_pos()
-            editor.autocompleter.complete(
-              editor.buffer, pos, key.chr,
-              proc (comps: seq[Completion]) = editor.completions = comps
-            )
+            editor.trigger_autocomplete(key.chr)
           elif key.chr in editor.autocompleter.finish:
             clear_completions = true
+          elif editor.autocompleter.min_word_len != 0 and
+               editor.completion_query().len >= editor.autocompleter.min_word_len:
+            editor.trigger_autocomplete(key.chr)
     of KeyFn:
       case key.fn:
         of 2:
           if editor.autocompleter != nil:
-            let pos = editor.primary_cursor().get_pos()
-            editor.autocompleter.complete(
-              editor.buffer, pos, ' ',
-              proc (comps: seq[Completion]) = editor.completions = comps
-            )
+            editor.trigger_autocomplete(Rune(' '))
+            clear_completions = false
         else: discard
     of KeyUnknown, KeyNone: clear_completions = false
     else: discard
   if clear_completions:
     editor.completions = @[]
+    editor.completion_time = get_time()
   editor.merge_cursors()
 
 method list_commands(editor: Editor): seq[Command] =
@@ -1253,3 +1273,4 @@ proc make_editor*(app: App): Window =
 
 proc make_editor*(app: App, path: string): Window =
   make_editor(app, app.make_buffer(path))
+
