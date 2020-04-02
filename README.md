@@ -14,7 +14,7 @@ A simple text editor written in Nim.
 ```bash
 nim compile -r --opt:speed main.nim
 ```
-  
+
 ### SDL2 Backend
 Note: Requires https://github.com/nim-lang/sdl2
 ```bash

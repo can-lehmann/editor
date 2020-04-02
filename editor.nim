@@ -193,13 +193,24 @@ proc render(quick_open: QuickOpen, box: Box, ren: var TermRenderer) =
   ), ren)
 
 proc make_quick_open(app: App): owned QuickOpen =
-  let files = index_project()
-    .map(entry => FileEntry(
-      path: entry.path,
-      name: entry.name,
-      changed: app.is_changed(entry.path)
-    ))
-  
+  var
+    files = index_project()
+      .map(entry => FileEntry(
+        path: entry.path,
+        name: entry.name,
+        changed: app.is_changed(entry.path)
+      ))
+    known_files: seq[FileEntry] = @[]
+    unknown_files: seq[FileEntry] = @[]
+    
+  for entry in files:
+    if app.languages.detect_language(entry.name) == nil:
+      unknown_files.add(entry)
+    else:
+      known_files.add(entry)
+
+  files = known_files & unknown_files
+
   return QuickOpen(
     entry: make_entry(app.copy_buffer),
     files: files,
@@ -1090,27 +1101,54 @@ method render(editor: Editor, box: Box, ren: var TermRenderer) =
         bracket_matches.add(match)
   
   var current_token = 0
+  var shifts = init_table[int, int]()
+  
+  for cursor in editor.cursors:
+    var pos = editor.buffer.to_2d(cursor.get_pos())
+    let width = box.size.x - line_numbers_width - 1
+    shifts[pos.y] = 0
+    while pos.x >= width:
+      shifts[pos.y] += width
+      pos.x -= width
   
   for y in 0..<(box.size.y - prompt_size - 1):
     let it = y + editor.scroll.y
+    
     if it >= editor.buffer.lines.len:
       break
     
-    ren.move_to(line_numbers_width + 1 + box.min.x, y + box.min.y + 1)
     var
       index = editor.buffer.lines[it]
       reached_end = false
       is_indent = true
- 
+      
+    var index_shift = 0
+    if it in shifts:
+      index_shift = shifts[it]
+    index += index_shift
+    
+    if index_shift !=  0:
+      ren.move_to(line_numbers_width + box.min.x, y + box.min.y + 1)
+      ren.put('<', fg=Color(base: ColorWhite), bg=Color(base: ColorRed))
+    else:
+      ren.move_to(line_numbers_width + 1 + box.min.x, y + box.min.y + 1)
+
     while editor.buffer.get_token(current_token).kind != TokenNone and
           editor.buffer.get_token(current_token).stop < index:
       current_token += 1
     
     while index < editor.buffer.len and editor.buffer[index] != '\n':
-      if index - editor.buffer.lines[it] + line_numbers_width + 1 >= box.size.x:
+      if index - editor.buffer.lines[it] + line_numbers_width + 1 - index_shift >= box.size.x:
         reached_end = true
         break
-    
+      
+      var
+        chr = editor.buffer[index]
+        fg = Color(base: ColorDefault, bright: false)
+      
+      if chr != ' ':
+        is_indent = false
+      
       if editor.is_under_cursor(index):
         ren.put(editor.buffer[index], reverse=true)
         index += 1
@@ -1120,10 +1158,6 @@ method render(editor: Editor, box: Box, ren: var TermRenderer) =
         index += 1
         continue
           
-      var
-        chr = editor.buffer[index]
-        fg = Color(base: ColorDefault, bright: false)
-        
       while editor.buffer.get_token(current_token).kind != TokenNone and
             index >= editor.buffer.get_token(current_token).stop:
         current_token += 1
@@ -1132,9 +1166,6 @@ method render(editor: Editor, box: Box, ren: var TermRenderer) =
         let token = editor.buffer.get_token(current_token)
         if token.is_inside(index):
           fg = token.color()
-      
-      if chr != ' ':
-        is_indent = false
       
       if chr == ' ' and fg.base == ColorDefault:
         let
@@ -1148,7 +1179,7 @@ method render(editor: Editor, box: Box, ren: var TermRenderer) =
       
       ren.put(chr, fg=fg)
       index += 1
-    if index - editor.buffer.lines[it] + line_numbers_width + 1 >= box.size.x:
+    if index - editor.buffer.lines[it] + line_numbers_width + 1 - index_shift >= box.size.x:
       reached_end = true
     
     if editor.is_under_cursor(index) and (not reached_end):
