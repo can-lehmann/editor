@@ -332,6 +332,7 @@ proc update(term: Terminal): bool =
           button = event.button.mouse_button_to_id()
           x = event.x.int div term.cell_size.x
           y = event.y.int div term.cell_size.y
+          clicks = event.clicks.int
         
         if button != -1:
           term.mouse_buttons[button] = evt.kind == MouseButtonDown
@@ -341,11 +342,13 @@ proc update(term: Terminal): bool =
             of MouseButtonDown:
               term.mouse_queue.add_last(Mouse(kind: MouseDown,
                 button: button, x: x, y: y,
+                clicks: clicks,
                 buttons: term.mouse_buttons
               ))
             of MouseButtonUp:
               term.mouse_queue.add_last(Mouse(kind: MouseUp,
                 button: button, x: x, y: y,
+                clicks: clicks,
                 buttons: term.mouse_buttons
               ))
             else: quit "unreachable"

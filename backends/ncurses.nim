@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import common, tables, hashes, unicode
+import common, tables, hashes, unicode, times
 
 {.passL: gorge("pkg-config --libs ncursesw").}
 
@@ -202,33 +202,42 @@ proc read_key*(): Key =
   return Key(kind: KeyUnknown, key_code: key_code)
 
 
-var buttons: array[3, bool] = [false, false, false]
+var
+  buttons: array[3, bool] = [false, false, false]
+  ptime = get_time()
+  pbutton = -1
+  pclicks = 0
+
 proc read_mouse*(): Mouse =
   var event: MouseEvent
 
   if getmouse(event.addr) != OK:
     return Mouse(kind: MouseNone)
 
+  var
+    state = true
+    button = -1
+
   if (event.bstate and REPORT_MOUSE_POSITION) != 0:
     return Mouse(kind: MouseMove, x: event.x.int, y: event.y.int, buttons: buttons)
   elif (event.bstate and BUTTON1_PRESSED) != 0:
-    buttons[0] = true
-    return Mouse(kind: MouseDown, button: 0, x: event.x.int, y: event.y.int, buttons: buttons)
+    button = 0
+    state = true
   elif (event.bstate and BUTTON1_RELEASED) != 0:
-    buttons[0] = false
-    return Mouse(kind: MouseUp, button: 0, x: event.x.int, y: event.y.int, buttons: buttons)
+    button = 0
+    state = false
   elif (event.bstate and BUTTON2_PRESSED) != 0:
-    buttons[1] = true
-    return Mouse(kind: MouseDown, button: 1, x: event.x.int, y: event.y.int, buttons: buttons)
+    button = 1
+    state = true
   elif (event.bstate and BUTTON2_RELEASED) != 0:
-    buttons[1] = false
-    return Mouse(kind: MouseUp, button: 1, x: event.x.int, y: event.y.int, buttons: buttons)
+    button = 1
+    state = false
   elif (event.bstate and BUTTON3_PRESSED) != 0:
-    buttons[2] = true
-    return Mouse(kind: MouseDown, button: 2, x: event.x.int, y: event.y.int, buttons: buttons)
+    button = 2
+    state = true
   elif (event.bstate and BUTTON3_RELEASED) != 0:
-    buttons[2] = false
-    return Mouse(kind: MouseUp, button: 2, x: event.x.int, y: event.y.int, buttons: buttons)
+    button = 2
+    state = false
   elif (event.bstate and BUTTON4_PRESSED) != 0:
     return Mouse(kind: MouseScroll, delta: -1, x: event.x.int, y: event.y.int, buttons: buttons)
   elif (event.bstate and BUTTON4_RELEASED) != 0:
@@ -238,8 +247,39 @@ proc read_mouse*(): Mouse =
   elif (event.bstate and BUTTON5_RELEASED) != 0:
     return Mouse(kind: MouseScroll, delta: 1, x: event.x.int, y: event.y.int, buttons: buttons)
   
-  return Mouse(kind: MouseUnknown, x: event.x.int, y: event.y.int, state: event.bstate.uint16)
+  if button == -1:
+    return Mouse(kind: MouseUnknown,
+      x: event.x.int, y: event.y.int,
+      state: event.bstate.uint16,
+      buttons: buttons
+    )
   
+  buttons[button] = state
+  
+  if pbutton == button and
+     (get_time() - ptime).in_milliseconds() < 200:
+    if state:
+      pclicks += 1
+  else:
+    pclicks = 1
+  
+  if state:
+    ptime = get_time()
+    pbutton = button
+    
+  if state:    
+    return Mouse(kind: MouseDown,
+      button: button, buttons: buttons,
+      clicks: pclicks,
+      x: event.x.int, y: event.y.int
+    )
+  else:
+    return Mouse(kind: MouseUp,
+      button: button, buttons: buttons,
+      clicks: pclicks,
+      x: event.x.int, y: event.y.int
+    )
+
 proc terminal_width*(): int = stdscr.getmaxx().int()
 proc terminal_height*(): int = stdscr.getmaxy().int()
 

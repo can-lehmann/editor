@@ -358,6 +358,17 @@ proc range_lines(buffer: Buffer, start, stop: int): seq[int] =
   if result.len == 0 and buffer.lines.len != 0:
     result.add(buffer.lines.len - 1)
 
+proc line_range*(buffer: Buffer, line: int): (int, int) =
+  if line < 0 or line >= buffer.lines.len:
+    return (-1, -1)
+  var it = buffer.lines[line]
+  while it < buffer.text.len:
+    if buffer.text[it] == '\n':
+      it += 1
+      break
+    it += 1
+  return (buffer.lines[line], it)
+
 proc indent(buffer: Buffer, line: int) =
   let
     text = sequtils.repeat(Rune(' '), buffer.indent_width)
@@ -437,6 +448,9 @@ proc skip*(buffer: Buffer, pos: int, dir: int): int =
         result < buffer.text.len and
         buffer.text[result].is_alpha_numeric() == v:
     result += dir
+
+proc word_range*(buffer: Buffer, pos: int): (int, int) =
+  return (buffer.skip(pos, -1) + 1, buffer.skip(pos, 1))
 
 proc pop_non_empty[T](stack: var seq[seq[T]]): seq[T] =
   while result.len == 0:

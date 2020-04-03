@@ -253,6 +253,8 @@ proc update_list(find_def: FindDef) =
     find_def.list.selected = 0
 
 proc jump(editor: Editor, to: int)
+proc jump(editor: Editor, start, stop: int)
+
 proc jump_to_selected(find_def: FindDef, editor: Editor) =
   if find_def.list.selected < 0 or
      find_def.list.selected >= find_def.shown_defs.len:
@@ -457,6 +459,12 @@ proc jump(editor: Editor, to: int) =
   editor.completions = @[]
   editor.completion_time = get_time()
 
+proc jump(editor: Editor, start, stop: int) =
+  editor.jump_stack.add(editor.primary_cursor().get_pos())
+  editor.cursors = @[Cursor(kind: CursorSelection, start: start, stop: stop)]
+  editor.completions = @[]
+  editor.completion_time = get_time()
+
 proc goto_line(editor: Editor, inputs: seq[seq[Rune]]) =
   var line: int
   
@@ -641,14 +649,34 @@ method process_mouse(editor: Editor, mouse: Mouse): bool =
   case mouse.kind:
     of MouseDown:
       if mouse.button == 0:
-        editor.jump(editor.buffer.to_index(Index2d(
-          x: pos.x.max(0),
-          y: pos.y.min(editor.buffer.lines.len - 1).max(0)
-        )))
+        case mouse.clicks:
+          of 1:
+            editor.jump(editor.buffer.to_index(Index2d(
+              x: pos.x.max(0),
+              y: pos.y.min(editor.buffer.lines.len - 1).max(0)
+            )))
+          of 2:
+            let
+              index = editor.buffer.to_index(Index2d(
+                x: pos.x.max(0),
+                y: pos.y.min(editor.buffer.lines.len - 1).max(0)
+              ))
+              (start, stop) = editor.buffer.word_range(index)
+            editor.jump(start, stop)
+          of 3:
+            let  
+              line = pos.y.min(editor.buffer.lines.len - 1).max(0)
+              (start, stop) = editor.buffer.line_range(line)
+            if start != -1 and stop != -1:
+              editor.jump(start, stop)
+          else: discard
+        
         if editor.prompt.kind == PromptActive:
           editor.prompt.kind = PromptInactive
     of MouseUp, MouseMove:
-      if (mouse.kind == MouseUp and mouse.button == 0) or
+      if (mouse.kind == MouseUp and
+          mouse.button == 0 and
+          mouse.clicks == 1) or
          (mouse.kind == MouseMove and mouse.buttons[0]):
         let stop = editor.buffer.to_index(Index2d(
           x: pos.x.max(0),
@@ -1103,13 +1131,16 @@ method render(editor: Editor, box: Box, ren: var TermRenderer) =
   var current_token = 0
   var shifts = init_table[int, int]()
   
-  for cursor in editor.cursors:
-    var pos = editor.buffer.to_2d(cursor.get_pos())
+  block:
     let width = box.size.x - line_numbers_width - 1
-    shifts[pos.y] = 0
-    while pos.x >= width:
-      shifts[pos.y] += width
-      pos.x -= width
+    if width <= 0:
+      break
+    for cursor in editor.cursors:
+      var pos = editor.buffer.to_2d(cursor.get_pos())
+      shifts[pos.y] = 0
+      while pos.x >= width:
+        shifts[pos.y] += width
+        pos.x -= width
   
   for y in 0..<(box.size.y - prompt_size - 1):
     let it = y + editor.scroll.y

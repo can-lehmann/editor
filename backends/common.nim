@@ -42,16 +42,16 @@ type
     MouseUnknown, MouseNone,
     MouseMove,
     MouseDown, MouseUp,
-    MouseScroll,
-    MouseClick, MouseDoubleClick, MouseTripleClick
+    MouseScroll
 
   Mouse* = object
     x*: int
     y*: int
     buttons*: array[3, bool]
     case kind*: MouseKind:
-      of MouseUp, MouseDown, MouseClick, MouseDoubleClick, MouseTripleClick:
+      of MouseDown, MouseUp:
         button*: int
+        clicks*: int
       of MouseScroll:
         delta*: int
       of MouseUnknown:
@@ -152,6 +152,7 @@ proc `$`*(mouse: Mouse): string =
   case mouse.kind:
     of MouseDown, MouseUp:
       result &= " " & display_mouse_button(mouse.button)
+      result &= " " & $mouse.clicks
     of MouseScroll:
       result &= " " & $mouse.delta
     else: discard

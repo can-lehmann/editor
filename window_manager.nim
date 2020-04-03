@@ -176,9 +176,12 @@ method process_mouse(cmd_search: CommandSearch, mouse: Mouse): bool =
       discard cmd_search.list.process_mouse(mouse_rel)
 
 method process_key(cmd_search: CommandSearch, key: Key) =
+  if key.kind == KeyEscape or
+     (key.kind == KeyChar and key.chr == 'e' and key.ctrl):
+    cmd_search.app.root_pane.open_window(cmd_search.prev_window)
+    return
+  
   case key.kind:
-    of KeyEscape:
-      cmd_search.app.root_pane.open_window(cmd_search.prev_window)
     of KeyReturn:
       cmd_search.run_command()
     of KeyArrowUp, KeyArrowDown:
