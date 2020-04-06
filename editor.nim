@@ -20,8 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import sequtils, strutils, os, sugar, streams, deques, times
-import unicode, sets, hashes, tables, algorithm
+import sequtils, strutils, os, sugar, times
+import unicode, tables, algorithm
 import utils, ui_utils, termdiff, highlight/highlight
 import buffer, window_manager
 
@@ -1329,6 +1329,11 @@ proc make_editor*(app: App, buffer: Buffer): Editor =
     app: app
   )
   result.cursor_hook_id = result.buffer.register_hook(result.make_cursor_hook())
+
+  if result.buffer.language != nil:
+    let id = result.buffer.language.id
+    if id in result.app.autocompleters:
+      result.autocompleter = app.autocompleters[id]
 
 proc make_editor*(app: App): Window =
   make_editor(app, make_buffer())

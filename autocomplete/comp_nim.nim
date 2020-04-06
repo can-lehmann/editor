@@ -186,7 +186,7 @@ proc restart_nimsuggest(ctx: Context) =
   let buffer = ctx.tracked.pop()
   ctx.nimsuggest = start_process(path, args=["--address:127.0.0.1", "--autobind", buffer.file_path])
   ctx.proc_selector = new_selector[pointer]()
-  ctx.proc_selector.register(ctx.nimsuggest.output_handle.int, {Event.Read}, nil)
+  ctx.proc_selector.registerHandle(ctx.nimsuggest.output_handle.int, {Event.Read}, nil)
   
   for buf in ctx.tracked:
     ctx.waiting.add_first(WaitingJob(
@@ -219,7 +219,7 @@ method close(ctx: Context) =
       discard ctx.send_command("quit")
       discard ctx.nimsuggest.wait_for_exit(timeout=1000)
       ctx.nimsuggest.close()
-    except OSError as e:
+    except OSError:
       echo "OSError"
 
   remove_dir(ctx.folder)
@@ -382,7 +382,7 @@ method track(ctx: Context, buffer: Buffer) =
     defs_callback: proc (defs: seq[Definition]) =
       var style_counts: array[CaseStyle, int]
       for def in defs:
-         style_counts[def.name.case_style()] += 1
+         style_counts[def.name.split('.')[^1].case_style()] += 1
       if style_counts[CaseCamel] < style_counts[CaseSnake]:
         ctx.case_styles[buffer] = CaseSnake
       else:
