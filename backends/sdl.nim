@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import tables, unicode, sequtils, strutils, sugar, deques, hashes, colors, times
+import tables, unicode, strutils, deques, hashes, colors, times
 import sdl2, sdl2/ttf
 import "../utils"
 import common

@@ -21,7 +21,7 @@
 # SOFTWARE.
 
 
-import strutils, deques, unicode, hashes, sets, sequtils, sugar
+import strutils, deques, unicode, hashes, sets, sequtils
 import utils, termdiff
 
 type

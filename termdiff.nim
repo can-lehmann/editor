@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import utils, sequtils, strutils, backends/common, unicode
+import utils, backends/common, unicode
 
 when defined(sdl_backend):
   import backends/sdl

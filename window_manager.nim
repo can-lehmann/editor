@@ -21,7 +21,7 @@
 # SOFTWARE.
 
 import strutils, tables, unicode, sequtils, sugar, hashes
-import utils, ui_utils, highlight/highlight, termdiff, buffer
+import utils, ui_utils, termdiff, buffer
 
 type
   Window* = ref object of RootObj
@@ -63,9 +63,9 @@ type
     buffers*: Table[string, Buffer]
     autocompleters*: Table[int, Autocompleter]
 
-method process_key*(window: Window, key: Key) {.base.} = quit "Not implemented"
+method process_key*(window: Window, key: Key) {.base.} = quit "Not implemented: process_key"
 method process_mouse*(window: Window, mouse: Mouse): bool {.base.} = discard
-method render*(window: Window, box: Box, ren: var TermRenderer) {.base.} = quit "Not implemented"
+method render*(window: Window, box: Box, ren: var TermRenderer) {.base.} = quit "Not implemented: render"
 method close*(window: Window) {.base.} = discard
 method list_commands*(window: Window): seq[Command] {.base.} = discard
 
