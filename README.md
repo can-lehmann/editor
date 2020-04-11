@@ -1,5 +1,5 @@
 # Editor
-A simple text editor written in Nim.
+A text editor written in Nim.
 
 ## Features
 - Quick Open 
@@ -8,15 +8,22 @@ A simple text editor written in Nim.
 - Unicode Support (utf-8)
 - Syntax Highlighting
 - Multiple Windows
+- Autocompletion using Nimsuggest
+- Mouse Support
 
 ## Installation
 ### ncurses Backend
+When using the ncurses backend, the development package for
+ncurses needs to be installed.
+
 ```bash
 nim compile -r --opt:speed main.nim
 ```
 
 ### SDL2 Backend
-Note: Requires https://github.com/nim-lang/sdl2
+The sdl backend requires the [sdl2 module](https://github.com/nim-lang/sdl2).
+You also need to supply your own font which has to be placed in `assets/font.ttf`.
+
 ```bash
 nim compile -r -o:main-sdl --opt:speed -d:sdl_backend main.nim
 ```
@@ -60,3 +67,4 @@ nim compile -r -o:main-sdl --opt:speed -d:sdl_backend main.nim
 ## License
 This project is licensed under the MIT License.
 See LICENSE.txt for more details.
+
