@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import tables, unicode, strutils, deques, hashes, colors, times
+import tables, unicode, strutils, deques, hashes, colors, times, os
 import sdl2, sdl2/ttf
 import "../utils"
 import common
@@ -143,7 +143,7 @@ proc recompute_screen_size(term: Terminal) =
       term.key_queue.add_last(Key(kind: KeyUnknown).add_modifiers(term))
 
 proc set_font_size(term: Terminal, font_size: int) =
-  let font = open_font("assets/font.ttf", font_size.cint)
+  let font = open_font(get_app_dir() / "assets" / "font.ttf", font_size.cint)
   if font == nil:
     return
   term.font = font
@@ -419,7 +419,7 @@ proc make_terminal(): Terminal =
     window = create_window("Editor", 100, 100, 640, 480, SDL_WINDOW_RESIZABLE or
                                                          SDL_WINDOW_SHOWN)
     ren = window.create_renderer(-1, Renderer_PresentVSync)
-    font = open_font("assets/font.ttf", 12)
+    font = open_font(get_app_dir() / "assets" / "font.ttf", 12)
 
   if font == nil:
     quit "Could not open font"
