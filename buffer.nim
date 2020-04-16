@@ -209,6 +209,20 @@ proc to_2d*(buffer: Buffer, index: int): Index2d =
       return result
     result = Index2d(x: index - line_index, y: it)
 
+proc to_display_2d*(buffer: Buffer, index: int): Index2d =
+  let pos = buffer.to_2d(index)
+  var
+    cur = buffer.lines[pos.y]
+    x = 0
+  while cur < index and cur < buffer.text.len:
+    case buffer.text[cur]:
+      of '\t':
+        x += buffer.indent_width
+      else:
+        x += 1
+    cur += 1
+  return Index2d(x: x, y: pos.y)
+
 proc to_index*(buffer: Buffer, pos: Index2d): int =
   result = pos.x + buffer.lines[pos.y]
   
@@ -217,6 +231,24 @@ proc to_index*(buffer: Buffer, pos: Index2d): int =
   
   if result >= buffer.lines[pos.y + 1]:
     result = buffer.lines[pos.y + 1] - 1
+
+proc display_to_index*(buffer: Buffer, pos: Index2d): int =
+  var
+    cur = buffer.lines[pos.y]
+    cur_x = pos.x
+  while cur_x > 0 and cur < buffer.text.len:
+    let chr = buffer.text[cur]
+    case chr:
+      of '\t':
+        cur_x -= buffer.indent_width
+      of '\n':
+        break
+      else:
+        cur_x -= 1
+    cur += 1
+  if cur_x < 0:
+    cur -= 1
+  return cur
 
 proc set_path*(buffer: Buffer, path: string, langs: seq[Language] = @[]) =
   buffer.file_path = path

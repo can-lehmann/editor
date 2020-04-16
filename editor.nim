@@ -651,13 +651,13 @@ method process_mouse(editor: Editor, mouse: Mouse): bool =
       if mouse.button == 0:
         case mouse.clicks:
           of 1:
-            editor.jump(editor.buffer.to_index(Index2d(
+            editor.jump(editor.buffer.display_to_index(Index2d(
               x: pos.x.max(0),
               y: pos.y.min(editor.buffer.lines.len - 1).max(0)
             )))
           of 2:
             let
-              index = editor.buffer.to_index(Index2d(
+              index = editor.buffer.display_to_index(Index2d(
                 x: pos.x.max(0),
                 y: pos.y.min(editor.buffer.lines.len - 1).max(0)
               ))
@@ -678,7 +678,7 @@ method process_mouse(editor: Editor, mouse: Mouse): bool =
           mouse.button == 0 and
           mouse.clicks == 1) or
          (mouse.kind == MouseMove and mouse.buttons[0]):
-        let stop = editor.buffer.to_index(Index2d(
+        let stop = editor.buffer.display_to_index(Index2d(
           x: pos.x.max(0),
           y: pos.y.min(editor.buffer.lines.len - 1).max(0)
         ))
@@ -1129,18 +1129,37 @@ method render(editor: Editor, box: Box, ren: var TermRenderer) =
         bracket_matches.add(match)
   
   var current_token = 0
-  var shifts = init_table[int, int]()
+  var
+    shifts = init_table[int, int]()
+    display_shifts = init_table[int, int]()
   
   block:
     let width = box.size.x - line_numbers_width - 1
     if width <= 0:
       break
     for cursor in editor.cursors:
-      var pos = editor.buffer.to_2d(cursor.get_pos())
+      var pos = editor.buffer.to_display_2d(cursor.get_pos())
       shifts[pos.y] = 0
-      while pos.x >= width:
-        shifts[pos.y] += width
-        pos.x -= width
+      display_shifts[pos.y] = 0
+      var stopped = false
+      while pos.x >= width and not stopped:
+        let initial_x = pos.x
+        while abs(pos.x - initial_x) < width:
+          let index = editor.buffer.lines[pos.y] + shifts[pos.y]
+          if index > editor.buffer.text.len:
+            stopped = true
+            break
+          let chr = editor.buffer.text[index]
+          case chr:
+            of '\t':
+              pos.x -= editor.buffer.indent_width
+            of '\n':
+              stopped = true
+              break
+            else:
+              pos.x -= 1
+          shifts[pos.y] += 1
+        display_shifts[pos.y] += abs(pos.x - initial_x)
   
   for y in 0..<(box.size.y - prompt_size - 1):
     let it = y + editor.scroll.y
@@ -1152,11 +1171,13 @@ method render(editor: Editor, box: Box, ren: var TermRenderer) =
       index = editor.buffer.lines[it]
       reached_end = false
       is_indent = true
-      
+      x = 0
+    
     var index_shift = 0
     if it in shifts:
       index_shift = shifts[it]
     index += index_shift
+    x += index_shift
     
     if index_shift !=  0:
       ren.move_to(line_numbers_width + box.min.x, y + box.min.y + 1)
@@ -1177,16 +1198,33 @@ method render(editor: Editor, box: Box, ren: var TermRenderer) =
         chr = editor.buffer[index]
         fg = Color(base: ColorDefault, bright: false)
       
-      if chr != ' ':
+      if chr != ' ' and chr != '\t':
         is_indent = false
+      
+      if chr == '\t':
+        let indent_width = editor.buffer.indent_width
+        if editor.is_under_cursor(index):
+          for it in 0..<indent_width:
+            ren.put(' ', reverse=true)
+        else:
+          let fg = Color(base: ColorBlack, bright: true)
+          ren.put(to_runes("»")[0], fg=fg)
+          for it in 0..<(indent_width - 2):
+            ren.put(' ', fg=fg)
+          ren.put(to_runes("│")[0], fg=fg)
+        index += 1
+        x += indent_width
+        continue
       
       if editor.is_under_cursor(index):
         ren.put(editor.buffer[index], reverse=true)
         index += 1
+        x += 1
         continue
       elif index in bracket_matches:
         ren.put(editor.buffer[index], fg=Color(base: ColorBlack), bg=Color(base: ColorRed, bright: true))
         index += 1
+        x += 1
         continue
           
       while editor.buffer.get_token(current_token).kind != TokenNone and
@@ -1199,9 +1237,7 @@ method render(editor: Editor, box: Box, ren: var TermRenderer) =
           fg = token.color()
       
       if chr == ' ' and fg.base == ColorDefault:
-        let
-          indent_width = editor.buffer.indent_width
-          x = index - editor.buffer.lines[it]
+        let indent_width = editor.buffer.indent_width
         if x mod indent_width == indent_width - 1 and is_indent:
           chr = to_runes("│")[0]
         else:
@@ -1210,6 +1246,7 @@ method render(editor: Editor, box: Box, ren: var TermRenderer) =
       
       ren.put(chr, fg=fg)
       index += 1
+      x += 1
     if index - editor.buffer.lines[it] + line_numbers_width + 1 - index_shift >= box.size.x:
       reached_end = true
     
@@ -1220,7 +1257,8 @@ method render(editor: Editor, box: Box, ren: var TermRenderer) =
   let
     comps = editor.filter_completions()
     comp_width = comps.compute_width()
-  var pos = editor.buffer.to_2d(editor.primary_cursor().get_pos()) + box.min
+  var pos = editor.buffer.to_display_2d(editor.primary_cursor().get_pos()) + box.min
+  let completion_line = pos.y
   pos.y -= editor.scroll.y - 1
   pos.x += line_numbers_width - 1
   
@@ -1229,7 +1267,10 @@ method render(editor: Editor, box: Box, ren: var TermRenderer) =
     if it >= MAX_COMPS:
       break
     
-    let p = pos + Index2d(y: it + 1)
+    var p = pos + Index2d(y: it + 1)
+    if completion_line in display_shifts:
+      p.x -= display_shifts[completion_line]
+    
     if p.y <= 0:
       continue
     if p.y >= box.max.y - prompt_size:
