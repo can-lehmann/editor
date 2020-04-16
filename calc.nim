@@ -198,6 +198,22 @@ proc make_input(app: App): Input =
 
 proc make_input(calc: Calc): Input = calc.app.make_input()
 
+proc max_input_number_width(calc: Calc): int =
+  ($calc.inputs.len).len + 2
+
+method process_mouse*(calc: Calc, mouse: Mouse): bool =
+  if mouse.y == 0 and mouse.x < calc.max_input_number_width:
+    return true
+  
+  if (mouse.y - 1) mod 3 == 0:
+    if mouse.kind == MouseDown:
+      calc.selected = (mouse.y - 1) div 3
+      calc.selected = max(min(calc.selected, calc.inputs.len - 1), 0)
+    var mouse_rel = mouse
+    mouse_rel.x -= calc.max_input_number_width + 1
+    mouse_rel.y = 0
+    calc.inputs[calc.selected].entry.process_mouse(mouse_rel)
+
 method process_key*(calc: Calc, key: Key) =
   case key.kind:
     of KeyReturn:
@@ -218,9 +234,6 @@ method process_key*(calc: Calc, key: Key) =
         calc.inputs[calc.selected].output = node.eval()
       else:
         calc.inputs[calc.selected].output = nil
-
-proc max_input_number_width(calc: Calc): int =
-  ($calc.inputs.len).len + 2
 
 proc input_number(calc: Calc, n: int): string =
   return "[" & strutils.align($n, ($calc.inputs.len).len) & "]"
