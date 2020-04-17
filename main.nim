@@ -23,8 +23,9 @@
 import unicode, tables, os
 import termdiff, window_manager, buffer
 import editor, keyinfo, calc, file_manager
-import highlight/highlight, highlight/nim, highlight/html, highlight/lisp
-import autocomplete/comp_nim
+import highlight/nim, highlight/html, highlight/lisp
+when not defined(mingw):
+  import autocomplete/comp_nim
 
 setup_term()
 system.add_quit_proc(quit_app)
@@ -36,8 +37,7 @@ var
       name: "Nim",
       highlighter: new_nim_highlighter,
       file_exts: @["nim", "nims"],
-      indent_width: 2,
-      make_autocompleter: make_nim_autocompleter
+      indent_width: 2
     ),
     Language(
       name: "HTML",
@@ -73,6 +73,16 @@ var
       name: "JSON",
       file_exts: @["json"],
       indent_width: 2
+    ),
+    Language(
+      name: "Markdown",
+      file_exts: @["md"],
+      indent_width: 2
+    ),
+    Language(
+      name: "Text",
+      file_exts: @["txt"],
+      indent_width: 2
     )
   ]
   window_constructors = @[
@@ -81,6 +91,11 @@ var
     make_window_constructor("Calc", make_calc),
     make_window_constructor("Keyinfo", make_keyinfo)
   ]
+
+when not defined(mingw):
+  languages[0].make_autocompleter = make_nim_autocompleter
+
+var
   app = make_app(languages, window_constructors)
   root_pane = Pane(kind: PaneWindow, window: app.make_editor())
 
