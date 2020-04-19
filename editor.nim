@@ -502,11 +502,25 @@ proc replace_pattern(editor: Editor, inputs: seq[seq[Rune]]) =
     editor.jump(pos)
     editor.buffer.replace(pos, pos + inputs[0].len, inputs[1])
 
+proc set_indent_width(editor: Editor, inputs: seq[seq[Rune]]) =
+  try:
+    let width = parse_int($inputs[0])
+    if width <= 1:
+      editor.show_info(@["Invalid Indent Width: " & $inputs[0]])
+      return
+    editor.buffer.indent_width = width
+    editor.hide_prompt()
+  except ValueError:
+    editor.show_info(@["Invalid Indent Width: " & $inputs[0]])
+
 proc save_as(editor: Editor, inputs: seq[seq[Rune]]) =
   if inputs[0].len == 0:
     return
   
   let path = absolute_path($inputs[0])
+  if editor.buffer.file_path != "" and
+     editor.buffer.file_path in editor.app.buffers:
+    editor.app.buffers.del(editor.buffer.file_path)
   editor.buffer.set_path(path, editor.app.languages)
   editor.app.buffers[path] = editor.buffer
   editor.buffer.save()
@@ -724,6 +738,13 @@ proc show_find(editor: Editor) =
 proc show_goto(editor: Editor) =
   editor.show_prompt("Go to Line", @["Line: "], callback=goto_line)
 
+proc show_set_indent_width(editor: Editor) =
+  editor.show_prompt(
+    "Set Indent Width",
+    @["Width: "],
+    callback=set_indent_width
+  )
+
 proc show_replace(editor: Editor) =
   editor.show_prompt(
     "Find and replace",
@@ -731,9 +752,12 @@ proc show_replace(editor: Editor) =
     callback=replace_pattern
   )
 
+proc show_save_as(editor: Editor) =
+  editor.show_prompt("Save As", @["File Name:"], callback=save_as)
+
 proc save(editor: Editor) =
   if editor.buffer.file_path == "":
-    editor.show_prompt("Save", @["File Name:"], callback=save_as)
+    editor.show_save_as()
   else:
     editor.buffer.save()
     editor.show_info(@["File saved."])
@@ -1017,6 +1041,10 @@ method list_commands(editor: Editor): seq[Command] =
       cmd: () => editor.save()
     ),
     Command(
+      name: "Save As",
+      cmd: () => editor.show_save_as()
+    ),
+    Command(
       name: "New Buffer",
       shortcut: @[Key(kind: KeyChar, ctrl: true, chr: Rune('n'))],
       cmd: () => editor.new_buffer()
@@ -1065,6 +1093,10 @@ method list_commands(editor: Editor): seq[Command] =
       name: "Only Primary Cursor",
       shortcut: @[Key(kind: KeyChar, ctrl: true, chr: Rune('o'))],
       cmd: () => editor.only_primary_cursor()
+    ),
+    Command(
+      name: "Set Indent Width",
+      cmd: () => editor.show_set_indent_width()
     )
   ]
 
