@@ -73,6 +73,8 @@ type
         insert_pos: int
         insert_text: seq[Rune]
   
+  IndentStyle = enum IndentSpaces, IndentTab
+  
   CursorHook* = proc(start: int, delta: int) {.closure.}
 
   Buffer* = ref object
@@ -88,6 +90,7 @@ type
     undo_stack: seq[seq[Action]]
     redo_stack: seq[seq[Action]]
     indent_width*: int
+    indent_style*: IndentStyle
 
 # Autocompleter
 method track*(ctx: Autocompleter, buffer: Buffer) {.base.} =
@@ -277,6 +280,11 @@ proc display_file_name*(buffer: Buffer): string =
   else:
     result &= "Text"
   result &= ", " & $buffer.indent_width
+  result &= ", "
+  if buffer.indent_style == IndentSpaces:
+    result &= "Spaces"
+  elif buffer.indent_style == IndentTab:
+    result &= "Tab"
   result &= ")"
 
 proc save*(buffer: Buffer) =
@@ -401,43 +409,48 @@ proc line_range*(buffer: Buffer, line: int): (int, int) =
     it += 1
   return (buffer.lines[line], it)
 
-proc indent(buffer: Buffer, line: int) =
-  let
-    text = sequtils.repeat(Rune(' '), buffer.indent_width)
-    pos = buffer.lines[line]
-    before = buffer.text.substr(0, pos - 1) 
-    after = buffer.text.substr(pos)
-  
-  buffer.text = before & text & after
-  buffer.delete_tokens(pos)
-  buffer.changed = true
-  buffer.call_hooks(pos, buffer.indent_width)
-  buffer.undo_frame().add(Action(kind: ActionInsert, insert_pos: pos, insert_text: text))
-  buffer.redo_stack = @[]
-  buffer.update_line_indices(pos + 1, buffer.indent_width)
-
 proc is_indented(buffer: Buffer, pos: int): bool =
-  if pos + buffer.indent_width - 1 >= buffer.len:
-    return false
+  case buffer.indent_style:
+    of IndentSpaces:
+      if pos + buffer.indent_width - 1 >= buffer.len:
+        return false
+      
+      for it in 0..<buffer.indent_width:
+        if buffer.text[it + pos] != ' ':
+          return false
+      return true
+    of IndentTab:
+      if pos >= buffer.len:
+        return false
+      return buffer.text[pos] == '\t'
   
-  for it in 0..<buffer.indent_width:
-    if buffer.text[it + pos] != ' ':
-      return false
-  return true
-  
-proc unindent*(buffer: Buffer, line: int) =
+proc unindent_line*(buffer: Buffer, line: int) =
   let pos = buffer.lines[line]
   if not buffer.is_indented(pos):
     return
-  buffer.delete(pos, pos + buffer.indent_width)
-  
+  case buffer.indent_style:
+    of IndentSpaces:
+      buffer.delete(pos, pos + buffer.indent_width)
+    of IndentTab:
+      buffer.delete(pos, pos + 1)
+
 proc unindent*(buffer: Buffer, start, stop: int) =
   for line_index in buffer.range_lines(start, stop):
-    buffer.unindent(line_index)
+    buffer.unindent_line(line_index)
+
+proc indent*(buffer: Buffer, pos: int) =
+  case buffer.indent_style:
+    of IndentSpaces:
+      buffer.insert(pos, sequtils.repeat(Rune(' '), buffer.indent_width))
+    of IndentTab:
+      buffer.insert(pos, Rune('\t'))
+
+proc indent_line(buffer: Buffer, line: int) =
+  buffer.indent(buffer.lines[line])
 
 proc indent*(buffer: Buffer, start, stop: int) =
   for line_index in buffer.range_lines(start, stop):
-    buffer.indent(line_index)
+    buffer.indent_line(line_index)
 
 proc match_bracket(buffer: Buffer, pos, delta: int, open_chr, close_chr: Rune): int =
   if pos >= buffer.len:
@@ -525,19 +538,6 @@ proc finish_undo_frame*(buffer: Buffer) =
   if buffer.undo_stack[buffer.undo_stack.len - 1].len > 0:
     buffer.undo_stack.add(@[])
 
-proc make_buffer*(): Buffer =
-  return Buffer(
-    file_path: "",
-    text: @[],
-    lines: @[0],
-    changed: false,
-    tokens: @[],
-    tokens_done: false,
-    language: nil,
-    cursor_hooks: init_table[int, CursorHook](),
-    indent_width: 2
-  )
-
 proc guess_indent_width(text: seq[Rune]): int =
   var
     is_indent = true
@@ -570,9 +570,52 @@ proc guess_indent_width(text: seq[Rune]): int =
       best_score = score
       best = indent_width
   return best
+
+proc guess_indent_style(text: seq[Rune]): IndentStyle =
+  var
+    is_indent = true
+    scores: array[IndentStyle, int]
+  for chr in text:
+    case chr:
+      of '\t':
+        if is_indent:
+          scores[IndentTab] += 1
+      of ' ':
+        if is_indent:
+          scores[IndentSpaces] += 1
+      of '\n': is_indent = true
+      else: is_indent = false
   
+  var max_score = 0
+  result = IndentSpaces
+  for style, score in scores.pairs:
+    if score > max_score:
+      result = style
+      max_score = score
+
+proc make_buffer*(): Buffer =
+  return Buffer(
+    file_path: "",
+    text: @[],
+    lines: @[0],
+    changed: false,
+    tokens: @[],
+    tokens_done: false,
+    language: nil,
+    cursor_hooks: init_table[int, CursorHook](),
+    indent_width: 2,
+    indent_style: IndentSpaces
+  )
+
 proc make_buffer*(path: string, lang: Language = nil): Buffer =
-  let text = to_runes(path.read_file())
+  let
+    text = to_runes(path.read_file())
+    indent_style = text.guess_indent_style()
+  var indent_width = 2
+  if indent_style == IndentSpaces:
+    indent_width = text.guess_indent_width()
+  elif not lang.is_nil:
+    indent_width = lang.indent_width
   return Buffer(
     file_path: path,
     text: text,
@@ -582,7 +625,8 @@ proc make_buffer*(path: string, lang: Language = nil): Buffer =
     tokens_done: false,
     language: lang,
     cursor_hooks: init_table[int, CursorHook](),
-    indent_width: text.guess_indent_width()
+    indent_width: indent_width,
+    indent_style: indent_style
   )
 
 proc make_buffer*(path: string, langs: seq[Language]): Buffer =

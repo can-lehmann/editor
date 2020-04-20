@@ -951,11 +951,8 @@ method process_key(editor: Editor, key: Key) =
             else:
               for cursor in editor.cursors:
                 case cursor.kind:
-                  of CursorInsert:  
-                    editor.buffer.insert(cursor.pos, sequtils.repeat(
-                      Rune(' '),
-                      editor.buffer.indent_width
-                    ))
+                  of CursorInsert:
+                    editor.buffer.indent(cursor.pos)
                   of CursorSelection:
                     let cur = cursor.sort()
                     editor.buffer.indent(cur.start, cur.stop)
@@ -963,7 +960,7 @@ method process_key(editor: Editor, key: Key) =
             for cursor in editor.cursors:
               case cursor.kind:
                 of CursorInsert:  
-                  editor.buffer.unindent(editor.buffer.to_2d(cursor.pos).y)
+                  editor.buffer.unindent_line(editor.buffer.to_2d(cursor.pos).y)
                 of CursorSelection:
                   let cur = cursor.sort()
                   editor.buffer.unindent(cur.start, cur.stop)
