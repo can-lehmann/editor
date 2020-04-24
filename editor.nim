@@ -235,9 +235,19 @@ proc `$`(def_kind: DefKind): string =
     of DefType: return "type" 
     of DefUnknown: return "unknwon"
 
+proc matches(def: Definition, pattern: string): bool =
+  let
+    parts = pattern.to_lower().split(" ")
+    name = to_lower($def.name)
+  for part in parts:
+    if part notin name and
+       part notin $def.kind:
+      return false
+  return true
+
 proc update_list(find_def: FindDef) =
   find_def.shown_defs = find_def.defs.filter(def =>
-    ($find_def.entry.text).to_lower() in ($def.name).to_lower())
+    def.matches($find_def.entry.text))
   
   let kind_width = find_def.shown_defs
     .map(def => len($def.kind))
