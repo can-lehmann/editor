@@ -73,7 +73,8 @@ type
         insert_pos: int
         insert_text: seq[Rune]
   
-  IndentStyle = enum IndentSpaces, IndentTab
+  IndentStyle* = enum IndentSpaces, IndentTab
+  NewlineStyle* = enum NewlineLf, NewlineCrLf
   
   CursorHook* = proc(start: int, delta: int) {.closure.}
 
@@ -91,6 +92,7 @@ type
     redo_stack: seq[seq[Action]]
     indent_width*: int
     indent_style*: IndentStyle
+    newline_style*: NewlineStyle
 
 # Autocompleter
 method track*(ctx: Autocompleter, buffer: Buffer) {.base.} =
@@ -266,6 +268,11 @@ proc file_name*(buffer: Buffer): string =
     return ""
   return dirs[dirs.len - 1]
 
+proc `$`*(newline_style: NewlineStyle): string =
+  case newline_style:
+    of NewlineLf: return "Lf"
+    of NewlineCrLf: return "CrLf"
+
 proc display_file_name*(buffer: Buffer): string =
   if buffer.file_name == "":
     result = "*Untitled file*"
@@ -285,6 +292,8 @@ proc display_file_name*(buffer: Buffer): string =
     result &= "Spaces"
   elif buffer.indent_style == IndentTab:
     result &= "Tab"
+  result &= ", "
+  result &= $buffer.newline_style
   result &= ")"
 
 proc save*(buffer: Buffer) =
@@ -538,6 +547,11 @@ proc finish_undo_frame*(buffer: Buffer) =
   if buffer.undo_stack[buffer.undo_stack.len - 1].len > 0:
     buffer.undo_stack.add(@[])
 
+proc to_runes*(newline_style: NewlineStyle): seq[Rune] =
+  case newline_style:
+    of NewlineLf: return @[Rune('\n')]
+    of NewlineCrLf: return @[Rune('\r'), Rune('\n')]
+
 proc guess_indent_width(text: seq[Rune]): int =
   var
     is_indent = true
@@ -593,6 +607,30 @@ proc guess_indent_style(text: seq[Rune]): IndentStyle =
       result = style
       max_score = score
 
+proc guess_newline_style(text: seq[Rune]): NewlineStyle =
+  var
+    is_cr = false
+    scores: array[NewlineStyle, int]
+  for it, chr in text:
+    case chr:
+      of '\r':
+        is_cr = true
+        continue
+      of '\n':
+        if is_cr:
+          scores[NewlineCrLf].inc()
+        else:  
+          scores[NewlineLf].inc()
+      else: discard
+    is_cr = false
+  
+  var max_score = 0
+  result = NewlineLf
+  for style, score in scores.pairs:
+    if score > max_score:
+      result = style
+      max_score = score
+
 proc make_buffer*(): Buffer =
   return Buffer(
     file_path: "",
@@ -604,13 +642,15 @@ proc make_buffer*(): Buffer =
     language: nil,
     cursor_hooks: init_table[int, CursorHook](),
     indent_width: 2,
-    indent_style: IndentSpaces
+    indent_style: IndentSpaces,
+    newline_style: NewlineLf
   )
 
 proc make_buffer*(path: string, lang: Language = nil): Buffer =
   let
     text = to_runes(path.read_file())
     indent_style = text.guess_indent_style()
+    newline_style = text.guess_newline_style()
   var indent_width = 2
   if indent_style == IndentSpaces:
     indent_width = text.guess_indent_width()
@@ -626,7 +666,8 @@ proc make_buffer*(path: string, lang: Language = nil): Buffer =
     language: lang,
     cursor_hooks: init_table[int, CursorHook](),
     indent_width: indent_width,
-    indent_style: indent_style
+    indent_style: indent_style,
+    newline_style: newline_style
   )
 
 proc make_buffer*(path: string, langs: seq[Language]): Buffer =

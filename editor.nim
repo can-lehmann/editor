@@ -879,8 +879,8 @@ method process_key(editor: Editor, key: Key) =
           continue
         let
           indent_level = editor.buffer.indentation(cursor.pos)
-          indent = repeat(' ', indent_level)
-        editor.buffer.insert(cursor.pos, to_runes('\n' & indent))
+          indent = sequtils.repeat(Rune(' '), indent_level)
+        editor.buffer.insert(cursor.pos, editor.buffer.newline_style.to_runes() & indent)
     of KeyPageDown:
       for it, cursor in editor.cursors:
         var pos = editor.buffer.to_2d(cursor.get_pos())
@@ -1254,6 +1254,15 @@ method render(editor: Editor, box: Box, ren: var TermRenderer) =
         index += 1
         x += indent_width
         continue
+      elif chr == '\r' and fg.base == ColorDefault:
+        if editor.is_under_cursor(index):
+          ren.put(' ', reverse=true)
+        else:
+          let fg = Color(base: ColorBlack, bright: true)
+          ren.put(to_runes("←")[0], fg=fg)
+        index += 1
+        x += 1
+        continue
       
       if editor.is_under_cursor(index):
         ren.put(editor.buffer[index], reverse=true)
@@ -1282,7 +1291,7 @@ method render(editor: Editor, box: Box, ren: var TermRenderer) =
         else:
           chr = '.'
         fg = Color(base: ColorBlack, bright: true)
-      
+
       ren.put(chr, fg=fg)
       index += 1
       x += 1
