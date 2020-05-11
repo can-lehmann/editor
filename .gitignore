@@ -8,3 +8,4 @@ test.*
 test-*.txt
 assets/font.ttf
 build/
+.temp*

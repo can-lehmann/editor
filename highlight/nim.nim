@@ -26,6 +26,7 @@ import highlight, "../utils"
 type
   State = ref object of HighlightState
     it: int
+    is_float: bool
 
 const
   NIM_KEYWORDS = [
@@ -105,9 +106,20 @@ method next*(state: State, text: seq[Rune]): Token =
           it += 1
         let state = State(it: it + 1)
         return Token(kind: TokenComment, start: start, stop: it, state: state)
-    of ':', '<', '>', '[', ']', '(', ')', '{', '}', ',', ';', '=', '`', '.':
+    of ':', '<', '>', '[', ']', '(', ')', '{', '}', ',', ';', '=', '`':
       let state = State(it: start + 1)
       return Token(kind: TokenUnknown, start: start, stop: start + 1, state: state)
+    of '.':
+      var
+        kind = TokenUnknown
+        offset = 1
+      if state.is_float and
+         start + 1 < text.len and
+         is_digit(text[start + 1]):
+        kind = TokenLiteral
+        offset = 2
+      let state = State(it: start + 1)
+      return Token(kind: kind, start: start, stop: start + offset, state: state)
     else:
       var
         name: seq[Rune] = @[]
@@ -122,7 +134,9 @@ method next*(state: State, text: seq[Rune]): Token =
           else:
             name.add(chr)
         it += 1
-      let state = State(it: it)
-      return Token(kind: name.token_kind(), start: start, stop: it, state: state)
+      let
+        kind = name.token_kind()
+        state = State(it: it, is_float: name.is_float(allow_underscore=true))
+      return Token(kind: kind, start: start, stop: it, state: state)
 
 proc new_nim_highlighter*(): HighlightState = State()
