@@ -22,7 +22,7 @@
 
 import osproc, unicode, strutils, sequtils, sugar, sets, deques
 import net, times, os, streams, random, selectors, tables, hashes
-import "../buffer", "../utils"
+import ../buffer, ../utils
 
 type
   CaseStyle = enum CaseUnknown, CaseCamel, CaseSnake, CasePascal
@@ -50,11 +50,11 @@ type
     
   Context = ref ContextObj
   ContextObj = object of Autocompleter
-    nimsuggest: Process
-    proc_selector: Selector[pointer]
-    port: Port
     gen: Rand
 
+    nimsuggest: Process
+    port: Port
+    
     jobs: seq[Job]
     waiting: Deque[Job]
 
@@ -163,7 +163,6 @@ proc make_context(): Context =
       Rune(')'), Rune('}'), Rune(']'), Rune('{')
     ],
     nimsuggest: nil,
-    proc_selector: new_selector[pointer](),
     gen: init_rand(get_time().to_unix()),
     min_word_len: 5
   )
@@ -181,9 +180,7 @@ proc restart_nimsuggest(ctx: Context) =
   let buffer = ctx.tracked.pop()
   ctx.nimsuggest = start_process(path, args=[
     "--address:127.0.0.1", "--autobind", buffer.file_path
-  ])
-  ctx.proc_selector = new_selector[pointer]()
-  ctx.proc_selector.register_handle(ctx.nimsuggest.output_handle.int, {Event.Read}, nil)
+  ], options={poInteractive})
   
   for buf in ctx.tracked:
     ctx.waiting.add_first(Job(
@@ -201,7 +198,6 @@ proc send_command(ctx: Context, command: string): Socket =
     return socket
   except OSError:
     if not ctx.nimsuggest.running:
-      ctx.proc_selector.unregister(ctx.nimsuggest.output_handle.int)
       ctx.nimsuggest.close()
       ctx.nimsuggest = nil
       ctx.port = Port(0)
@@ -326,8 +322,14 @@ method poll(ctx: Context) =
     return
   
   if ctx.port == Port(0):
-    if ctx.proc_selector.select(0).len == 0:
-      return
+    when defined(windows):
+      if not ctx.nimsuggest.has_data():
+        return
+    else:
+      let selector = new_selector[pointer]()
+      selector.register_handle(ctx.nimsuggest.output_handle.int, {Read}, nil)
+      if selector.select(0).len == 0:
+        return
     try:
       ctx.port = Port(ctx.nimsuggest.output_stream().read_line().parse_int())
     except IOError, ValueError:

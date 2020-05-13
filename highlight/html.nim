@@ -21,7 +21,7 @@
 # SOFTWARE.
 
 import unicode
-import highlight, "../utils"
+import highlight, ../utils
 
 type State = ref object of HighlightState
   it: int

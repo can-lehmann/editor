@@ -21,7 +21,7 @@
 # SOFTWARE.
 
 import strutils, unicode
-import "../utils", "../termdiff"
+import ../utils, ../termdiff
 
 type
   HighlightState* = ref object of RootObj

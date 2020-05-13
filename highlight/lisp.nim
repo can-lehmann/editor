@@ -21,7 +21,7 @@
 # SOFTWARE.
 
 import unicode, strutils
-import "../utils", highlight
+import ../utils, highlight
 
 type State = ref object of HighlightState
   it: int

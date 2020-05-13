@@ -24,8 +24,7 @@ import unicode, tables, os
 import termdiff, window_manager, buffer
 import editor, keyinfo, calc, file_manager
 import highlight/nim, highlight/html, highlight/lisp
-when not defined(mingw):
-  import autocomplete/comp_nim
+import autocomplete/comp_nim
 
 setup_term()
 system.add_quit_proc(quit_app)
@@ -37,7 +36,8 @@ var
       name: "Nim",
       highlighter: new_nim_highlighter,
       file_exts: @["nim", "nims"],
-      indent_width: 2
+      indent_width: 2,
+      make_autocompleter: make_nim_autocompleter
     ),
     Language(
       name: "HTML",
@@ -87,13 +87,10 @@ var
   ]
   window_constructors = @[
     make_window_constructor("Editor", make_editor),
-    make_window_constructor("File Manager", make_file_manager), 
+    make_window_constructor("File Manager", make_file_manager),
     make_window_constructor("Calc", make_calc),
     make_window_constructor("Keyinfo", make_keyinfo)
   ]
-
-when not defined(mingw):
-  languages[0].make_autocompleter = make_nim_autocompleter
 
 var
   app = make_app(languages, window_constructors)
