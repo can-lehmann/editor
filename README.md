@@ -17,7 +17,7 @@ When using the ncurses backend, the development package for
 ncurses needs to be installed.
 
 ```bash
-nim compile -r --opt:speed main.nim
+nim compile -r --opt:speed --threads:on main.nim
 ```
 
 ### SDL2 Backend
@@ -25,7 +25,7 @@ The sdl backend requires the [sdl2 module](https://github.com/nim-lang/sdl2).
 You also need to supply your own font which has to be placed in `assets/font.ttf`.
 
 ```bash
-nim compile -r -o:main-sdl --opt:speed -d:sdl_backend main.nim
+nim compile -r -o:main-sdl --opt:speed -d:sdl_backend --threads:on main.nim
 ```
 
 ## Keyboard Bindings

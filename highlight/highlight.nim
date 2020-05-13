@@ -66,20 +66,20 @@ proc is_digit*(chr: Rune): bool =
 
 proc is_int*(str: seq[Rune], allow_underscore: bool = false): bool =
   for it, chr in str:
-    if not is_digit(chr) or
-           (chr == '_' and allow_underscore) or
-           (chr == '+' and it == 0 and str.len > 1) or
-           (chr == '-' and it == 0 and str.len > 1):
+    if not (is_digit(chr) or
+            (chr == '_' and allow_underscore) or
+            (chr == '+' and it == 0 and str.len > 1) or
+            (chr == '-' and it == 0 and str.len > 1)):
       return false
   return true
 
 proc is_float*(str: seq[Rune], allow_underscore: bool = false): bool =
   var point = false
   for it, chr in str:
-    if not is_digit(chr) or
-           (chr == '_' and allow_underscore) or
-           (chr == '+' and it == 0 and str.len > 1) or
-           (chr == '-' and it == 0 and str.len > 1):
+    if not (is_digit(chr) or
+            (chr == '_' and allow_underscore) or
+            (chr == '+' and it == 0 and str.len > 1) or
+            (chr == '-' and it == 0 and str.len > 1)):
       if chr == '.' and not point and str.len > 1:
         point = true
       else:

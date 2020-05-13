@@ -32,37 +32,33 @@ type
 
   JobKind = enum JobDefs, JobComp, JobTrack
   
-  WaitingJob = object
-    buffer: Buffer
-    case kind: JobKind:
-      of JobTrack: discard
-      of JobComp:
-        pos: int
-        comp_callback: CompCallback
-      of JobDefs:
-        defs_callback: DefsCallback
-  
   Job = object
     path: string
     socket: Socket
     data: string
+    chan: ptr Channel[string]
+    thread: Thread[(Socket, ptr Channel[string])]
+    buffer: Buffer  
     case kind: JobKind:
-      of JobDefs: defs_callback: DefsCallback
+      of JobDefs:
+        defs_callback: DefsCallback
       of JobComp:
+        pos: int
         case_style: CaseStyle
         comp_callback: CompCallback
-      else: discard
+      of JobTrack: discard
     
   Context = ref ContextObj
   ContextObj = object of Autocompleter
     nimsuggest: Process
+    proc_selector: Selector[pointer]
     port: Port
     gen: Rand
-    selector: Selector[pointer]
-    proc_selector: Selector[pointer]
-    jobs: Table[int, Job]
+
+    jobs: seq[Job]
+    waiting: Deque[Job]
+
     folder: string
-    waiting: Deque[WaitingJob]
     tracked: HashSet[Buffer]
     case_styles: Table[Buffer, CaseStyle]
 
@@ -167,7 +163,6 @@ proc make_context(): Context =
       Rune(')'), Rune('}'), Rune(']'), Rune('{')
     ],
     nimsuggest: nil,
-    selector: new_selector[pointer](),
     proc_selector: new_selector[pointer](),
     gen: init_rand(get_time().to_unix()),
     min_word_len: 5
@@ -184,12 +179,14 @@ proc restart_nimsuggest(ctx: Context) =
   if ctx.tracked.len == 0:
     return
   let buffer = ctx.tracked.pop()
-  ctx.nimsuggest = start_process(path, args=["--address:127.0.0.1", "--autobind", buffer.file_path])
+  ctx.nimsuggest = start_process(path, args=[
+    "--address:127.0.0.1", "--autobind", buffer.file_path
+  ])
   ctx.proc_selector = new_selector[pointer]()
-  ctx.proc_selector.registerHandle(ctx.nimsuggest.output_handle.int, {Event.Read}, nil)
+  ctx.proc_selector.register_handle(ctx.nimsuggest.output_handle.int, {Event.Read}, nil)
   
   for buf in ctx.tracked:
-    ctx.waiting.add_first(WaitingJob(
+    ctx.waiting.add_first(Job(
       kind: JobTrack,
       buffer: buf
     ))
@@ -224,7 +221,7 @@ method close(ctx: Context) =
 
   remove_dir(ctx.folder)
 
-proc execute(job: Job) =
+proc handle(job: Job) =
   case job.kind:
     of JobComp:
       var comps: seq[Completion] = @[]
@@ -278,97 +275,93 @@ proc save_temp(ctx: Context, buffer: Buffer): string =
   except IOError:
     return
 
-proc execute(ctx: Context, job: WaitingJob) =
+proc read(args: (Socket, ptr Channel[string])) =
+  var data = ""
+  while true:
+    var packet: string
+    try:
+      packet = args[0].recv(512)
+    except OSError:
+      break
+    if packet.len == 0:
+      break
+    data &= packet
+  args[1][].send(data)
+
+proc execute(ctx: Context, job: Job) =
   case job.kind:
     of JobTrack:
       discard ctx.send_command("mod " & job.buffer.file_path)
-    of JobComp:
+    of JobComp, JobDefs:
       let tmp_path = ctx.save_temp(job.buffer)
       if tmp_path.len == 0:
         return
   
-      let
-        index = job.buffer.to_2d(job.pos)
-        socket = ctx.send_command(
-          "sug " & job.buffer.file_name & ";" & tmp_path & ":" & $(index.y + 1) & ":" & $(index.x)
-        )
+      var socket: Socket
+      case job.kind:
+        of JobComp:
+          let index = job.buffer.to_2d(job.pos)
+          socket = ctx.send_command(
+            "sug " & job.buffer.file_name & ";" & tmp_path & ":" & $(index.y + 1) & ":" & $(index.x)
+          )
+        of JobDefs:
+          socket = ctx.send_command("outline " & job.buffer.file_name & ";" & tmp_path)
+        else: discard
+      
       if socket == nil:
         ctx.waiting.add_last(job)
         return
       
-      var case_style = CaseUnknown
-      if job.buffer in ctx.case_styles:
-        case_style = ctx.case_styles[job.buffer]
-      
-      ctx.jobs[socket.get_fd().int] = Job(kind: JobComp,
-        comp_callback: job.comp_callback,
-        path: tmp_path,
-        socket: socket,
-        case_style: case_style
-      )
-      ctx.selector.register_handle(socket.get_fd(), {Event.Read}, nil)
-    of JobDefs:
-      let tmp_path = ctx.save_temp(job.buffer)
-      if tmp_path.len == 0:
-        return
-      
-      let socket = ctx.send_command(
-        "outline " & job.buffer.file_name & ";" & tmp_path
-      )
-      if socket == nil:
-        ctx.waiting.add_last(job)
-        return
-    
-      ctx.jobs[socket.get_fd().int] = Job(kind: JobDefs,
-        defs_callback: job.defs_callback,
-        path: tmp_path,
-        socket: socket
-      )
-      ctx.selector.register_handle(socket.get_fd(), {Event.Read}, nil)
+      ctx.jobs.add(job)
+      ctx.jobs[^1].socket = socket
+      ctx.jobs[^1].path = tmp_path
+      let chan = cast[ptr Channel[string]](alloc_shared0(sizeof Channel[string]))
+      chan[].open()
+      ctx.jobs[^1].chan = chan
+      create_thread(ctx.jobs[^1].thread, read, (socket, ctx.jobs[^1].chan))
 
 method poll(ctx: Context) =
-  if ctx.nimsuggest != nil:
-    if ctx.proc_selector.select(0).len > 0 and ctx.port == Port(0):
-      try:
-        ctx.port = Port(ctx.nimsuggest.output_stream().read_line().parse_int())
-      except IOError, ValueError:
-        ctx.nimsuggest.close()
-        ctx.nimsuggest = nil
-        ctx.port = Port(0)
-        ctx.restart_nimsuggest()
-        return
-      var jobs = ctx.waiting
-      for job in jobs:
-        ctx.execute(job)
+  if ctx.nimsuggest == nil:
+    ctx.restart_nimsuggest()
+    return
+  
+  if ctx.port == Port(0):
+    if ctx.proc_selector.select(0).len == 0:
+      return
+    try:
+      ctx.port = Port(ctx.nimsuggest.output_stream().read_line().parse_int())
+    except IOError, ValueError:
+      ctx.nimsuggest.close()
+      ctx.nimsuggest = nil
+      ctx.port = Port(0)
+      ctx.restart_nimsuggest()
+      return
+    for job in ctx.waiting:
+      ctx.execute(job)
+    ctx.waiting = init_deque[Job]()
+    return
+  
+  var it = 0
+  while it < ctx.jobs.len:
+    let (has_msg, data) = ctx.jobs[it].chan[].try_recv()
+    if not has_msg:
+      it += 1
+      continue
+    ctx.jobs[it].data = data
+    handle(ctx.jobs[it])
+    ctx.jobs[it].chan[].close()
+    dealloc_shared(ctx.jobs[it].chan)
+    ctx.jobs.del(it)
 
-  while true:
-    let fds = ctx.selector.select(0)
-    if fds.len == 0:
-      break
-    for fd in fds:
-      let job = ctx.jobs[fd.fd].addr
-      var data = ""
-      try:
-        data = job.socket.recv(512)
-      except OSError:
-        discard
-      if data == "":
-        ctx.selector.unregister(job.socket.get_fd())
-        job.socket.close()
-        job[].execute()
-        ctx.jobs.del(fd.fd)
-      job.data &= data
-
-proc try_execute(ctx: Context, job: WaitingJob) =
+proc add_waiting(ctx: Context, job: Job) =
   if ctx.nimsuggest == nil:
     ctx.waiting.add_last(job)
     ctx.restart_nimsuggest()
-    return
   elif ctx.port == Port(0):
     ctx.waiting.add_last(job)
-  
-  ctx.poll()
-  ctx.execute(job)
+  else:
+    ctx.poll()
+    ctx.execute(job)
 
 method track(ctx: Context, buffer: Buffer) =
   ctx.tracked.incl(buffer)
@@ -376,8 +369,8 @@ method track(ctx: Context, buffer: Buffer) =
     ctx.restart_nimsuggest()
   else:
     ctx.poll()
-    ctx.execute(WaitingJob(kind: JobTrack, buffer: buffer))
-  ctx.try_execute(WaitingJob(kind: JobDefs,
+    ctx.add_waiting(Job(kind: JobTrack, buffer: buffer))
+  ctx.add_waiting(Job(kind: JobDefs,
     buffer: buffer,
     defs_callback: proc (defs: seq[Definition]) =
       var style_counts: array[CaseStyle, int]
@@ -389,21 +382,27 @@ method track(ctx: Context, buffer: Buffer) =
         ctx.case_styles[buffer] = CaseCamel
   ))
 
+proc get_case_style(ctx: Context, buffer: Buffer): CaseStyle =
+  result = CaseUnknown
+  if buffer in ctx.case_styles:
+    result = ctx.case_styles[buffer]
+
 method complete(ctx: Context,
                 buffer: Buffer,
                 pos: int,
                 trigger: Rune,
                 callback: CompCallback) =
-  ctx.try_execute(WaitingJob(kind: JobComp,
+  ctx.add_waiting(Job(kind: JobComp,
     buffer: buffer,
     pos: pos,
-    comp_callback: callback
+    comp_callback: callback,
+    case_style: ctx.get_case_style(buffer)
   ))
 
 method list_defs(ctx: Context,
                  buffer: Buffer,
                  callback: DefsCallback) =
-  ctx.try_execute(WaitingJob(kind: JobDefs,
+  ctx.add_waiting(Job(kind: JobDefs,
     buffer: buffer,
     defs_callback: callback
   ))
