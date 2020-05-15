@@ -29,7 +29,8 @@ type
     DefLet, DefConst, DefVar,
     DefProc, DefMethod, DefTemplate, DefFunc,
     DefMacro, DefIterator, DefConverter,
-    DefType, DefField
+    DefType, DefField,
+    DefHeading
     
   Definition* = object
     kind*: DefKind
@@ -154,8 +155,15 @@ proc update_tokens*(buffer: Buffer) =
   buffer.tokens = @[]
   buffer.tokens_done = false
   
-  if buffer.language == nil:
+  if buffer.language == nil or
+     buffer.language.highlighter == nil:
     return
+
+  var state = buffer.language.highlighter()
+  var tok: Token
+  while (tok = state.next(buffer.text); tok.kind != TokenNone):
+    buffer.tokens.add(tok)
+    state = tok.state
 
 proc delete_tokens*(buffer: Buffer, start: int) =
   var tok: Token = Token(can_stop: true, state: HighlightState())

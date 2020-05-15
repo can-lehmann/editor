@@ -23,9 +23,9 @@
 import unicode, tables, os
 import termdiff, window_manager, buffer
 import editor, keyinfo, calc, file_manager
-import highlight/nim, highlight/html, highlight/lisp
-import highlight/markdown
-import autocomplete/comp_nim
+import highlight/html, highlight/lisp
+import highlight/markdown, autocomplete/comp_markdown
+import highlight/nim, autocomplete/comp_nim
 
 setup_term()
 system.add_quit_proc(quit_app)
@@ -79,7 +79,8 @@ var
       name: "Markdown",
       file_exts: @["md"],
       indent_width: 2,
-      highlighter: new_markdown_highlighter
+      highlighter: new_markdown_highlighter,
+      make_autocompleter: new_markdown_autocompleter
     ),
     Language(
       name: "Text",

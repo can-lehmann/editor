@@ -234,6 +234,7 @@ proc `$`(def_kind: DefKind): string =
     of DefField: return "field"
     of DefType: return "type" 
     of DefUnknown: return "unknwon"
+    of DefHeading: return "heading"
 
 proc matches(def: Definition, pattern: string): bool =
   let
