@@ -30,7 +30,7 @@ type
     DefProc, DefMethod, DefTemplate, DefFunc,
     DefMacro, DefIterator, DefConverter,
     DefType, DefField,
-    DefHeading
+    DefHeading, DefTag
     
   Definition* = object
     kind*: DefKind
@@ -44,6 +44,7 @@ type
     CompEnum, CompType, CompField,
     CompProc, CompFunc, CompConverter, CompMethod,
     CompIterator, CompTemplate, CompMacro,
+    CompTag
 
   Completion* = object
     kind*: CompKind

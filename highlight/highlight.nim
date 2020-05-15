@@ -33,7 +33,8 @@ type
     TokenFunc, TokenUnknown,
     TokenHeading, TokenBold, TokenItalic,
     TokenList, TokenLink, TokenCode,
-    TokenFormatting
+    TokenFormatting,
+    TokenTag, TokenTagClose
 
   Token* = object
     kind*: TokenKind
@@ -115,4 +116,5 @@ proc color*(token: Token): Color =
     of TokenItalic: return Color(base: ColorYellow, bright: false)
     of TokenBold: return Color(base: ColorRed, bright: true)
     of TokenFormatting: return Color(base: ColorRed, bright: true)
+    of TokenTag, TokenTagClose: return Color(base: ColorRed, bright: true)
     else: return Color(base: ColorDefault, bright: false)

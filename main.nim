@@ -23,8 +23,9 @@
 import unicode, tables, os
 import termdiff, window_manager, buffer
 import editor, keyinfo, calc, file_manager
-import highlight/html, highlight/lisp
-import highlight/markdown, autocomplete/comp_markdown
+import highlight/lisp
+import highlight/html, highlight/markdown
+import autocomplete/comp_simple
 import highlight/nim, autocomplete/comp_nim
 
 setup_term()
@@ -45,9 +46,7 @@ var
       highlighter: new_html_highlighter,
       file_exts: @["html", "htm"],
       indent_width: 2,
-      snippets: to_table({
-        to_runes("html"): to_runes("<html>\n  <head>\n    <meta charset=\"utf-8\">\n  </head>\n  <body>\n  </body>\n</html>")
-      })
+      make_autocompleter: new_html_autocompleter
     ),
     Language(
       name: "JavaScript",

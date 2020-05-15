@@ -20,38 +20,39 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import unicode, ../highlight/highlight
-import ../buffer, ../utils
-
-type
-  Context = ref object of Autocompleter
-
-method track(ctx: Context, buffer: Buffer) =
-  discard
-
-method complete*(ctx: Context,
-                 buffer: Buffer,
-                 pos: int,
-                 trigger: Rune,
-                 callback: proc (comps: seq[Completion])) =
-  callback(@[])
-
-method poll*(ctx: Context) = discard
-
-method list_defs*(ctx: Context,
-                  buffer: Buffer,
-                  callback: proc (defs: seq[Definition])) =
-  buffer.update_tokens()
-  var defs: seq[Definition] = @[]
-  for token in buffer.tokens:
-    if token.kind != TokenHeading:
-      continue
-    defs.add(Definition(
-      kind: DefHeading,
-      name: buffer.text[token.start..(token.stop - 1)],
-      pos: buffer.to_2d(token.start)
-    ))
-  callback(defs)
+import tables, unicode, sequtils, sugar
+import ../utils, ../buffer, ../highlight/highlight, autocomplete
 
 proc new_markdown_autocompleter*(): Autocompleter =
-  Context()
+  SimpleContext(
+    defs: to_table({
+      TokenHeading: DefHeading
+    })
+  )
+
+const HTML_TAGS = map(@[
+  "html", "head", "meta", "title", "body", "p",
+  "div", "span", "h1", "h2", "h3", "h4", "h5",
+  "h6", "iframe", "script", "img", "a",
+  "table", "thead", "tr", "td", "th", "tbody", "tfoot",
+  "caption", "input", "button", "code", "template",
+  "noscript", "textarea"
+], tag => Completion(kind: CompTag, text: to_runes(tag)))
+
+proc new_html_autocompleter*(): Autocompleter =
+  SimpleContext(
+    defs: to_table({
+      TokenTag: DefTag
+    }),
+    comps: HTML_TAGS,
+    triggers: @[
+      Rune('<'), Rune('/')
+    ],
+    finish: @[
+      Rune(' '), Rune('\n'), Rune('\r'), Rune('\t'),
+      Rune('='), Rune('>')
+    ],
+    min_word_len: 3
+  )
+
+

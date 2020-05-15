@@ -235,6 +235,7 @@ proc `$`(def_kind: DefKind): string =
     of DefType: return "type" 
     of DefUnknown: return "unknwon"
     of DefHeading: return "heading"
+    of DefTag: return "tag"
 
 proc matches(def: Definition, pattern: string): bool =
   let
@@ -1385,6 +1386,9 @@ method render(editor: Editor, box: Box, ren: var TermRenderer) =
       of CompEnum:
         kind_chr = 'e'
         bg_color = Color(base: ColorCyan)
+      of CompTag:
+        kind_chr = 't'
+        bg_color = Color(base: ColorRed)
       else: discard
     if bg_color.base == ColorYellow:
       fg_color.base = ColorBlack

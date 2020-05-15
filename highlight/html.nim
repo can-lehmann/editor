@@ -26,6 +26,7 @@ import highlight, ../utils
 type State = ref object of HighlightState
   it: int
   is_tag: bool
+  is_close: bool
 
 method next*(state: State, text: seq[Rune]): Token =
   var start = text.skip_whitespace(state.it)
@@ -39,12 +40,16 @@ method next*(state: State, text: seq[Rune]): Token =
         state = State(it: it + 1)
       return Token(kind: TokenString, start: start, stop: it + 1, state: state)
     of '<', '>', '/', '=':
-      var is_tag = false
+      var
+        is_tag = false
+        is_close = false
       case chr:
         of '<': is_tag = true
-        of '/': is_tag = state.is_tag
+        of '/':
+          is_tag = state.is_tag
+          is_close = true
         else: discard
-      let state = State(it: start + 1, is_tag: is_tag)
+      let state = State(it: start + 1, is_tag: is_tag, is_close: is_close)
       return Token(kind: TokenUnknown, start: start, stop: start + 1, state: state)
     else:
       var
@@ -60,7 +65,10 @@ method next*(state: State, text: seq[Rune]): Token =
         it += 1
       var kind = TokenName
       if state.is_tag:
-        kind = TokenKeyword
+        if state.is_close:
+          kind = TokenTagClose
+        else:
+          kind = TokenTag
       return Token(kind: kind, start: start, stop: it, state: State(it: it))
 
 proc new_html_highlighter*(): HighlightState = State()
