@@ -30,15 +30,19 @@ type
     TokenNone,
     TokenString, TokenChar, TokenLiteral,
     TokenType, TokenComment, TokenName, TokenKeyword,
-    TokenFunc, TokenUnknown
+    TokenFunc, TokenUnknown,
+    TokenHeading, TokenBold, TokenItalic,
+    TokenList, TokenLink, TokenCode
 
   Token* = object
     kind*: TokenKind
     start*: int
     stop*: int
     state*: HighlightState
+    can_stop*: bool
 
 method next*(state: HighlightState, text: seq[Rune]): Token {.base.} = quit "Abstract"
+method requires_stop_token*(state: HighlightState): bool {.base.} = false
 
 proc is_inside*(token: Token, index: int): bool =
   index >= token.start and index < token.stop
@@ -49,6 +53,16 @@ proc is_whitespace*(rune: Rune): bool =
 proc skip_whitespace*(text: seq[Rune], pos: int): int =
   result = pos
   while result < text.len and text[result].is_whitespace():
+    result += 1
+
+proc is_ascii*(rune: Rune): bool =
+  rune.int32 < 128 and rune.int32 >= 0
+
+proc skip*(text: seq[Rune], pos: int, chars: set[char]): int =
+  result = pos
+  while result < text.len and
+        text[result].is_ascii() and
+        text[result].char in chars:
     result += 1
 
 proc skip_string_like*(text: seq[Rune],
@@ -93,4 +107,10 @@ proc color*(token: Token): Color =
     of TokenComment: return Color(base: ColorBlue, bright: false)
     of TokenLiteral: return Color(base: ColorYellow, bright: false)
     of TokenType: return Color(base: ColorCyan, bright: true)
+    of TokenHeading: return Color(base: ColorRed, bright: true)
+    of TokenList: return Color(base: ColorRed, bright: true)
+    of TokenLink: return Color(base: ColorCyan, bright: true)
+    of TokenCode: return Color(base: ColorBlue, bright: false)
+    of TokenItalic: return Color(base: ColorYellow, bright: false)
+    of TokenBold: return Color(base: ColorRed, bright: true)
     else: return Color(base: ColorDefault, bright: false)

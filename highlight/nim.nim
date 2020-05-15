@@ -53,7 +53,7 @@ const
     "bool", "char", "auto", "pointer",
     "cint", "cshort", "cstring", "clong",
     "cuint", "culong", "cushort",
-    "openArray", "Table", "Deque", "HashSet"
+    "openArray", "Table", "Deque", "HashSet", "range"
   ]
 
 

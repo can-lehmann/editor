@@ -158,9 +158,12 @@ proc update_tokens*(buffer: Buffer) =
     return
 
 proc delete_tokens*(buffer: Buffer, start: int) =
+  var tok: Token = Token(can_stop: true, state: HighlightState())
   while buffer.tokens.len > 0 and
         buffer.tokens[buffer.tokens.len - 1].stop >= start:
-    discard buffer.tokens.pop()
+    tok = buffer.tokens.pop()
+  while not tok.can_stop and tok.state.requires_stop_token():
+    tok = buffer.tokens.pop()
   buffer.tokens_done = false
   
 proc get_token*(buffer: Buffer, index: int): Token =

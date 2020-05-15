@@ -24,6 +24,7 @@ import unicode, tables, os
 import termdiff, window_manager, buffer
 import editor, keyinfo, calc, file_manager
 import highlight/nim, highlight/html, highlight/lisp
+import highlight/markdown
 import autocomplete/comp_nim
 
 setup_term()
@@ -77,7 +78,8 @@ var
     Language(
       name: "Markdown",
       file_exts: @["md"],
-      indent_width: 2
+      indent_width: 2,
+      highlighter: new_markdown_highlighter
     ),
     Language(
       name: "Text",
