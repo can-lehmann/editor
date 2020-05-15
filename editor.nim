@@ -1118,6 +1118,11 @@ proc compute_width(comps: seq[Completion]): int =
   for comp in comps:
     result = max(result, comp.text.len + 1)
 
+const
+  CHAR_VERTICAL = to_runes("│")[0]
+  CHAR_INDENT = to_runes("»")[0]
+  CHAR_CR = to_runes("←")[0]
+
 method render(editor: Editor, box: Box, ren: var TermRenderer) =
   if editor.dialog.kind != DialogNone:
     editor.dialog.render(box, ren)
@@ -1248,10 +1253,10 @@ method render(editor: Editor, box: Box, ren: var TermRenderer) =
             ren.put(' ', reverse=true)
         else:
           let fg = Color(base: ColorBlack, bright: true)
-          ren.put(to_runes("»")[0], fg=fg)
+          ren.put(CHAR_INDENT, fg=fg)
           for it in 0..<(indent_width - 2):
             ren.put(' ', fg=fg)
-          ren.put(to_runes("│")[0], fg=fg)
+          ren.put(CHAR_VERTICAL, fg=fg)
         index += 1
         x += indent_width
         continue
@@ -1260,7 +1265,7 @@ method render(editor: Editor, box: Box, ren: var TermRenderer) =
           ren.put(' ', reverse=true)
         else:
           let fg = Color(base: ColorBlack, bright: true)
-          ren.put(to_runes("←")[0], fg=fg)
+          ren.put(CHAR_CR, fg=fg)
         index += 1
         x += 1
         continue
@@ -1299,7 +1304,7 @@ method render(editor: Editor, box: Box, ren: var TermRenderer) =
       if chr == ' ' and fg.base == ColorDefault:
         let indent_width = editor.buffer.indent_width
         if x mod indent_width == indent_width - 1 and is_indent:
-          chr = to_runes("│")[0]
+          chr = CHAR_VERTICAL
         else:
           chr = '.'
         fg = Color(base: ColorBlack, bright: true)

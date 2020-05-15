@@ -73,24 +73,39 @@ method next(state: State, text: seq[Rune]): Token =
       let state = State(it: start + 1, is_newline: true)
       return Token(kind: TokenUnknown, start: start, stop: start + 1, state: state, can_stop: true) 
     of '-':
-      let
-        kind = if state.is_newline: TokenList else: TokenUnknown
-        state = State(it: start + 1, is_bold: state.is_bold, is_italic: state.is_italic)
-      return Token(kind: kind, start: start, stop: start + 1, state: state)
-    of '*':
-      if state.is_newline and
-         start + 1 < text.len and
-         text[start + 1] == ' ':
-        return Token(
-          kind: TokenList,
-          start: start,
-          stop: start + 1,
-          state: State(it: start + 1)
-        )
+      if not state.is_newline:
+        skip_char()
+      if start + 2 < text.len and text[start + 1] == '-' and text[start + 2] == '-':
+        let state = State(it: start + 3)
+        return Token(kind: TokenFormatting, start: start, stop: start + 3, state: state)
+      elif start + 1 < text.len and text[start + 1] == ' ':
+        let state = State(it: start + 2)
+        return Token(kind: TokenFormatting, start: start, stop: start + 2, state: state)
+      else:
+        skip_char()
+    of '*', '_':
+      if state.is_newline and chr == '*':
+        if start + 1 < text.len and text[start + 1] == ' ':
+          return Token(
+            kind: TokenList,
+            start: start,
+            stop: start + 1,
+            state: State(it: start + 1)
+          )
+        elif start + 4 < text.len and
+             text[start + 1] == chr and
+             text[start + 2] == chr and
+             text[start + 3] == '\n':
+          return Token(
+            kind: TokenList,
+            start: start,
+            stop: start + 4,
+            state: State(it: start + 4, is_newline: true)
+          )
       
       let new_state = State(it: start + 1, is_bold: state.is_bold, is_italic: state.is_italic)
       var stop = start + 1
-      if start + 1 < text.len and text[start + 1] == '*':
+      if start + 1 < text.len and text[start + 1] == chr:
         new_state.is_bold = not new_state.is_bold
         stop = start + 2
       else:
