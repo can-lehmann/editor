@@ -1264,6 +1264,17 @@ method render(editor: Editor, box: Box, ren: var TermRenderer) =
         index += 1
         x += 1
         continue
+      elif chr == '\0':
+        if editor.is_under_cursor(index):
+          ren.put('0', reverse=true, bg=Color(base: ColorRed, bright: true))
+        else:
+          ren.put('0',
+            fg=Color(base: ColorWhite, bright: true),
+            bg=Color(base: ColorRed, bright: true)
+          )
+        index += 1
+        x += 1
+        continue
       
       if editor.is_under_cursor(index):
         ren.put(editor.buffer[index], reverse=true)
