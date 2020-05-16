@@ -345,12 +345,14 @@ method poll(ctx: Context) =
   
   var it = 0
   while it < ctx.jobs.len:
-    let (has_msg, data) = ctx.jobs[it].chan[].try_recv()
+    var (has_msg, data) = ctx.jobs[it].chan[].try_recv()
     if not has_msg:
       it += 1
       continue
     ctx.jobs[it].data = data
     handle(ctx.jobs[it])
+    if ctx.jobs[it].thread.running:
+      ctx.jobs[it].thread.join_thread()
     ctx.jobs[it].chan[].close()
     dealloc_shared(ctx.jobs[it].chan)
     ctx.jobs.del(it)
@@ -416,4 +418,5 @@ method buffer_info(ctx: Context, buffer: Buffer): seq[string] =
     of CaseSnake: return @["Snake Case"]
     of CasePascal: return @["Pascal Case"]
 
-proc make_nim_autocompleter*(): Autocompleter = make_context()
+proc make_nim_autocompleter*(): Autocompleter =
+  return make_context()

@@ -67,3 +67,4 @@ method list_defs*(ctx: SimpleContext,
     ))
   callback(defs)
 
+method close(ctx: SimpleContext) = discard
