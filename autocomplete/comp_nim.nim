@@ -34,10 +34,9 @@ type
   
   Job = object
     path: string
-    socket: Socket
     data: string
-    chan: ptr Channel[string]
-    thread: Thread[(Socket, ptr Channel[string])]
+    chan: ptr Channel[(bool, string)]
+    thread: Thread[(ptr Channel[(bool, string)], string, Port)]
     buffer: Buffer  
     case kind: JobKind:
       of JobDefs:
@@ -54,6 +53,8 @@ type
 
     nimsuggest: Process
     port: Port
+    when not defined(windows):
+      stdout_selector: Selector[pointer]
     
     jobs: seq[Job]
     waiting: Deque[Job]
@@ -166,6 +167,8 @@ proc make_context(): Context =
     gen: init_rand(get_time().to_unix()),
     min_word_len: 5
   )
+  when not defined(windows):
+    result.stdout_selector = new_selector[pointer]()
   result.folder = create_temp_folder(result.gen)
 
 proc find_nimsuggest(): string =
@@ -197,6 +200,7 @@ proc send_command(ctx: Context, command: string): Socket =
     socket.send(command & "\n")
     return socket
   except OSError:
+    socket.close()
     if not ctx.nimsuggest.running:
       ctx.nimsuggest.close()
       ctx.nimsuggest = nil
@@ -271,50 +275,57 @@ proc save_temp(ctx: Context, buffer: Buffer): string =
   except IOError:
     return
 
-proc read(args: (Socket, ptr Channel[string])) =
+proc read(args: (ptr Channel[(bool, string)], string, Port)) =
+  let socket = new_socket()
+  try:
+    socket.connect("localhost", args[2])
+    socket.send(args[1])
+  except OSError:
+    socket.close()
+    args[0][].send((false, ""))
+    return
   var data = ""
   while true:
     var packet: string
     try:
-      packet = args[0].recv(512)
+      packet = socket.recv(512)
     except OSError:
       break
     if packet.len == 0:
       break
     data &= packet
-  args[1][].send(data)
+  args[0][].send((true, data))
+  socket.close()
 
 proc execute(ctx: Context, job: Job) =
   case job.kind:
     of JobTrack:
-      discard ctx.send_command("mod " & job.buffer.file_path)
+      let sock = ctx.send_command("mod " & job.buffer.file_path)
+      if sock != nil:
+        sock.close()
     of JobComp, JobDefs:
       let tmp_path = ctx.save_temp(job.buffer)
       if tmp_path.len == 0:
         return
   
-      var socket: Socket
+      var command: string
       case job.kind:
         of JobComp:
           let index = job.buffer.to_2d(job.pos)
-          socket = ctx.send_command(
-            "sug " & job.buffer.file_name & ";" & tmp_path & ":" & $(index.y + 1) & ":" & $(index.x)
-          )
+          command = "sug " & job.buffer.file_name & ";" & tmp_path & ":" & $(index.y + 1) & ":" & $(index.x)
         of JobDefs:
-          socket = ctx.send_command("outline " & job.buffer.file_name & ";" & tmp_path)
+          command = "outline " & job.buffer.file_name & ";" & tmp_path
         else: discard
-      
-      if socket == nil:
-        ctx.waiting.add_last(job)
-        return
+      command &= "\n"
       
       ctx.jobs.add(job)
-      ctx.jobs[^1].socket = socket
       ctx.jobs[^1].path = tmp_path
-      let chan = cast[ptr Channel[string]](alloc_shared0(sizeof Channel[string]))
+      let chan = cast[ptr Channel[(bool, string)]](
+        alloc_shared0(sizeof Channel[(bool, string)])
+      )
       chan[].open()
       ctx.jobs[^1].chan = chan
-      create_thread(ctx.jobs[^1].thread, read, (socket, ctx.jobs[^1].chan))
+      create_thread(ctx.jobs[^1].thread, read, (ctx.jobs[^1].chan, command, ctx.port))
 
 method poll(ctx: Context) =
   if ctx.nimsuggest == nil:
@@ -326,9 +337,11 @@ method poll(ctx: Context) =
       if not ctx.nimsuggest.has_data():
         return
     else:
-      let selector = new_selector[pointer]()
-      selector.register_handle(ctx.nimsuggest.output_handle.int, {Read}, nil)
-      if selector.select(0).len == 0:
+      let handle = ctx.nimsuggest.output_handle.int
+      ctx.stdout_selector.register_handle(handle, {Read}, nil)
+      let selected = ctx.stdout_selector.select(0)
+      ctx.stdout_selector.unregister(handle)
+      if selected.len == 0:
         return
     try:
       ctx.port = Port(ctx.nimsuggest.output_stream().read_line().parse_int())
@@ -345,16 +358,31 @@ method poll(ctx: Context) =
   
   var it = 0
   while it < ctx.jobs.len:
-    var (has_msg, data) = ctx.jobs[it].chan[].try_recv()
+    var  
+      (has_msg, message) = ctx.jobs[it].chan[].try_recv()
+      (success, data) = message
     if not has_msg:
       it += 1
       continue
-    ctx.jobs[it].data = data
-    handle(ctx.jobs[it])
+    if success:
+      ctx.jobs[it].data = data
+      handle(ctx.jobs[it])
+      
     if ctx.jobs[it].thread.running:
       ctx.jobs[it].thread.join_thread()
     ctx.jobs[it].chan[].close()
     dealloc_shared(ctx.jobs[it].chan)
+    
+    if not success and not ctx.nimsuggest.running:
+      ctx.nimsuggest.close()
+      ctx.nimsuggest = nil
+      ctx.port = Port(0)
+      ctx.restart_nimsuggest()
+      for job in ctx.jobs:
+        ctx.waiting.add_last(job)
+      ctx.jobs = @[]
+      break
+
     ctx.jobs.del(it)
 
 proc add_waiting(ctx: Context, job: Job) =
