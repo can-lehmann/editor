@@ -367,22 +367,27 @@ method poll(ctx: Context) =
     if success:
       ctx.jobs[it].data = data
       handle(ctx.jobs[it])
-      
-    if ctx.jobs[it].thread.running:
-      ctx.jobs[it].thread.join_thread()
-    ctx.jobs[it].chan[].close()
-    dealloc_shared(ctx.jobs[it].chan)
     
     if not success and not ctx.nimsuggest.running:
       ctx.nimsuggest.close()
       ctx.nimsuggest = nil
       ctx.port = Port(0)
       ctx.restart_nimsuggest()
-      for job in ctx.jobs:
-        ctx.waiting.add_last(job)
+      for it2 in 0..<ctx.jobs.len:
+        if ctx.jobs[it2].thread.running:
+          ctx.jobs[it2].thread.join_thread()
+        if ctx.jobs[it2].chan != nil:
+          ctx.jobs[it2].chan[].close()
+          dealloc_shared(ctx.jobs[it2].chan)
+          ctx.jobs[it2].chan = nil
+        ctx.waiting.add_last(ctx.jobs[it2])
       ctx.jobs = @[]
       break
 
+    if ctx.jobs[it].thread.running:
+      ctx.jobs[it].thread.join_thread()
+    ctx.jobs[it].chan[].close()
+    dealloc_shared(ctx.jobs[it].chan)
     ctx.jobs.del(it)
 
 proc add_waiting(ctx: Context, job: Job) =
