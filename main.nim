@@ -23,7 +23,7 @@
 import unicode, tables, os
 import termdiff, window_manager, buffer
 import editor, keyinfo, calc, file_manager
-import highlight/lisp
+import highlight/lisp, highlight/json
 import highlight/html, highlight/markdown
 import autocomplete/comp_simple
 import highlight/nim, autocomplete/comp_nim
@@ -72,7 +72,8 @@ var
     Language(
       name: "JSON",
       file_exts: @["json"],
-      indent_width: 2
+      indent_width: 2,
+      highlighter: new_json_highlighter
     ),
     Language(
       name: "Markdown",
