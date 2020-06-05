@@ -25,6 +25,7 @@ import termdiff, window_manager, buffer
 import editor, keyinfo, calc, file_manager
 import highlight/lisp, highlight/json
 import highlight/html, highlight/markdown
+import highlight/cpp
 import autocomplete/comp_simple
 import highlight/nim, autocomplete/comp_nim
 
@@ -81,6 +82,12 @@ var
       indent_width: 2,
       highlighter: new_markdown_highlighter,
       make_autocompleter: new_markdown_autocompleter
+    ),
+    Language(
+      name: "C++",
+      file_exts: @["cpp", "hpp", "c", "h"],
+      indent_width: 2,
+      highlighter: new_cpp_highlighter
     ),
     Language(
       name: "Text",
