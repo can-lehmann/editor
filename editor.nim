@@ -941,6 +941,8 @@ method process_key(editor: Editor, key: Key) =
             editor.buffer.delete(cur.start, cur.stop)
             editor.cursors[it] = Cursor(kind: CursorInsert, pos: cur.start)
           of CursorInsert:
+            if cursor.pos >= editor.buffer.len:
+              continue
             editor.buffer.delete(cursor.pos, cursor.pos + 1)
     of KeyEscape:
       editor.only_primary_cursor()
