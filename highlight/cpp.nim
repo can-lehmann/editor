@@ -36,7 +36,8 @@ const
     "union", "if", "else", "while", "for", "template",
     "typedef", "typename", "throw", "try", "catch", "finally",
     "extern", "return", "using", "namespace", "inline",
-    "static", "new", "operator", "delete"
+    "static", "new", "operator", "delete", "enum", "switch",
+    "case", "default", "break", "continue", "do"
   ]
   CPP_TYPES = [
     "int", "char", "short", "unsigned", "signed", "bool",
@@ -88,7 +89,7 @@ method next(state: State, text: seq[Rune]): Token =
           return Token(kind: TokenString, start: start, stop: it + 1, state: state)
         of ':', '>', '[', ']', '(', ')',
            '{', '}', ',', ';', '=', '`', '.',
-           '+', '-', '*', '/', '&',
+           '+', '-', '*', '/', '&', '!',
            ' ', '\t', '\r':
           let state = State(it: start + 1, mode: ModePreprocessor)
           return Token(kind: TokenUnknown, start: start, stop: start + 1, state: state)
@@ -100,7 +101,7 @@ method next(state: State, text: seq[Rune]): Token =
             case text[it]:
               of ':', '<', '>', '[', ']', '(', ')',
                  '{', '}', ',', ';', '=', '`', '.',
-                 '+', '-', '*', '/', '&',
+                 '+', '-', '*', '/', '&', '!',
                  ' ', '\n', '\t', '\r':
                 break
               else: name.add(text[it])
@@ -126,7 +127,7 @@ method next(state: State, text: seq[Rune]): Token =
           return Token(kind: TokenKeyword, start: start, stop: start + 1, state: state)
         of ':', '<', '>', '[', ']', '(', ')',
            '{', '}', ',', ';', '=', '`', '.',
-           '+', '-', '*', '&':
+           '+', '-', '*', '&', '!':
           skip_chr()
         of '/':
           if start + 1 >= text.len:
@@ -155,7 +156,7 @@ method next(state: State, text: seq[Rune]): Token =
             case text[it]:
               of ':', '<', '>', '[', ']', '(', ')',
                  '{', '}', ',', ';', '=', '`', '.',
-                 '+', '-', '*', '/', '&',
+                 '+', '-', '*', '/', '&', '!',
                  ' ', '\n', '\t', '\r':
                 break
               else: name.add(text[it])
