@@ -93,6 +93,36 @@ proc open(file_manager: FileManager, path: string) =
   file_manager.update_list()
   file_manager.list.selected = 0
 
+method process_mouse(file_manager: FileManager, mouse: Mouse): bool =
+  if mouse.x == 0 and mouse.y == 0:
+    return true
+
+  var mouse_rel = mouse
+  case file_manager.mode.kind:
+    of ModeNone:
+      mouse_rel.y -= 1
+      mouse_rel.x -= 2
+    of ModeSearch:
+      mouse_rel.x -= len("Search:") + 1
+      mouse_rel.y -= 1
+      if mouse_rel.y == 0:
+        file_manager.mode.search_entry.process_mouse(mouse_rel)
+        return
+      mouse_rel.y -= 1
+
+  if file_manager.shown_items.len == 0:
+    return
+  if file_manager.list.process_mouse(mouse_rel):
+    let
+      selected = file_manager.list.selected
+      item = file_manager.shown_items[selected]
+    case item.kind:
+      of ItemDir: file_manager.open(item.path)
+      of ItemFile:
+        let editor = file_manager.app.make_editor(item.path)
+        file_manager.app.root_pane.open_window(editor)
+      else: discard
+
 method process_key(file_manager: FileManager, key: Key) =
   case key.kind:
     of KeyReturn:
