@@ -113,15 +113,16 @@ method process_mouse(file_manager: FileManager, mouse: Mouse): bool =
   if file_manager.shown_items.len == 0:
     return
   if file_manager.list.process_mouse(mouse_rel):
-    let
-      selected = file_manager.list.selected
-      item = file_manager.shown_items[selected]
-    case item.kind:
-      of ItemDir: file_manager.open(item.path)
-      of ItemFile:
-        let editor = file_manager.app.make_editor(item.path)
-        file_manager.app.root_pane.open_window(editor)
-      else: discard
+    if mouse.kind == MouseDown:
+      let
+        selected = file_manager.list.selected
+        item = file_manager.shown_items[selected]
+      case item.kind:
+        of ItemDir: file_manager.open(item.path)
+        of ItemFile:
+          let editor = file_manager.app.make_editor(item.path)
+          file_manager.app.root_pane.open_window(editor)
+        else: discard
 
 method process_key(file_manager: FileManager, key: Key) =
   case key.kind:
