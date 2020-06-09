@@ -171,7 +171,9 @@ proc delete_tokens*(buffer: Buffer, start: int) =
   while buffer.tokens.len > 0 and
         buffer.tokens[buffer.tokens.len - 1].stop >= start:
     tok = buffer.tokens.pop()
-  while not tok.can_stop and tok.state.requires_stop_token():
+  while not tok.can_stop and
+        tok.state.requires_stop_token() and
+        buffer.tokens.len > 0:
     tok = buffer.tokens.pop()
   buffer.tokens_done = false
   
