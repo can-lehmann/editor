@@ -790,6 +790,16 @@ proc only_primary_cursor(editor: Editor) =
   var cur = editor.primary_cursor()
   editor.cursors = @[cur]
 
+proc jump_to_matching_brackets(editor: Editor) =
+  for cursor in editor.cursors.mitems:
+    if cursor.kind != CursorInsert:
+      continue
+    let match_pos = editor.buffer.match_bracket(cursor.pos)
+    if match_pos != -1:
+      cursor = Cursor(kind: CursorInsert,
+        pos: match_pos
+      )
+
 proc trigger_autocomplete(editor: Editor, chr: Rune) =
   let 
     pos = editor.primary_cursor().get_pos()
@@ -829,8 +839,8 @@ method process_key(editor: Editor, key: Key) =
       return
   
     editor.prompt.process_key(key)
-    return    
-
+    return
+  
   defer: editor.buffer.finish_undo_frame()
   
   var clear_completions = true
@@ -993,6 +1003,7 @@ method process_key(editor: Editor, key: Key) =
           of Rune('o'): editor.only_primary_cursor()
           of Rune('z'): editor.buffer.undo()
           of Rune('y'): editor.buffer.redo()
+          of Rune('u'): editor.jump_to_matching_brackets()
           else: discard
       else:
         editor.insert(key.chr)
@@ -1108,6 +1119,11 @@ method list_commands(editor: Editor): seq[Command] =
     Command(
       name: "Set Indent Width",
       cmd: () => editor.show_set_indent_width()
+    ),
+    Command(
+      name: "Jump to Matching Brackets",
+      shortcut: @[Key(kind: KeyChar, ctrl: true, chr: Rune('u'))],
+      cmd: () => editor.jump_to_matching_brackets()
     )
   ]
 
