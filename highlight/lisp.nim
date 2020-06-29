@@ -35,7 +35,8 @@ const
     "let", "fn", "if", "cond", "case",
     "recur", "quote", "lambda", "import",
     "use", "require", "set!", "let*", "letrec",
-    "begin", "progn", "do"
+    "begin", "progn", "do", "and", "or", "not",
+    "throw", "try", "catch"
   ]
 
 proc token_kind(name: seq[Rune], is_call: bool, is_quote: bool): TokenKind =
