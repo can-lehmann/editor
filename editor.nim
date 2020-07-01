@@ -116,7 +116,7 @@ proc index_project(dir: string): seq[FileEntry] =
       path: path,
       name: path.relative_path(dir)
     ))
-    .filter(entry => not entry.name.is_hidden())
+    .filter((entry: FileEntry) => not entry.name.is_hidden())
     .sorted()
 
 proc display_name(entry: FileEntry): string =
@@ -233,7 +233,7 @@ proc `$`(def_kind: DefKind): string =
     of DefIterator: return "iterator"
     of DefField: return "field"
     of DefType: return "type" 
-    of DefUnknown: return "unknwon"
+    of DefUnknown: return "unknown"
     of DefHeading: return "heading"
     of DefTag: return "tag"
 
@@ -336,7 +336,8 @@ proc make_find_def(editor: Editor): FindDef =
   if editor.autocompleter != nil:
     editor.autocompleter.list_defs(
       editor.buffer,
-      (defs: seq[Definition]) => find_def.set_defs(defs)
+      proc (defs: seq[Definition]) =
+        find_def.set_defs(defs)
     )
   return find_def
 
