@@ -601,6 +601,7 @@ proc load_file(editor: Editor, path: string) =
   editor.cursor_hook_id = editor.buffer.register_hook(editor.make_cursor_hook())
   editor.hide_prompt()
   editor.cursors = @[Cursor(kind: CursorInsert, pos: 0)]
+  editor.autocompleter = nil
   if editor.buffer.language != nil:
     let id = editor.buffer.language.id
     if id in editor.app.autocompleters:
