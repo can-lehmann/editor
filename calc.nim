@@ -75,11 +75,18 @@ type
     value: string
 
 proc is_float(str: string): bool =
-  var point = false
+  var
+    point = false
+    is_beginning = true
   for it, chr in str:
-    if chr.is_digit:
+    if chr.is_digit or chr in 'a' .. 'f':
+      is_beginning = false
       continue
-    if it == 0 and (chr == '+' or chr == '-') and str.len > 1:
+    if is_beginning and (chr == '+' or chr == '-') and str.len > 1:
+      continue
+    if is_beginning and
+       (chr == '#' or chr == 'o' or chr == 'B') and
+       str.len > 1:
       continue
     if chr == '.' and not point:
       point = true
@@ -126,7 +133,7 @@ proc tokenize(str: string): seq[Token] =
               of ')': result.add(Token(kind: TokenClose))
               of '\"': mode = ModeString
               else: discard
-          of '0'..'9', '.':
+          of '0'..'9', 'a'..'f', '.', 'B', '#', 'o':
             if cur_kind == StrOperator:
               push_token()
             cur_kind = StrNumber
@@ -174,9 +181,67 @@ proc token(iter: TokenIter): Token = iter.tokens[iter.cur - 1]
 
 proc back(iter: var TokenIter, token_count: int = 1) = iter.cur -= token_count
 
+proc get_base(str: string): char =
+  for chr in str:
+    if chr in { 'B', '#', 'o' }:
+      return chr
+  return ' '
+
+proc is_negative(str: string): bool =
+  for chr in str:
+    if chr == '-':
+      return true
+  return false
+
+proc to_digit_of_base(chr: char, base: int): int =
+  if chr in '0'..'9':
+    return ord(chr) - ord('0')
+  elif chr in 'a'..'z':
+    return ord(chr) - ord('a') + 10
+  else:
+    return 0
+
+proc is_digit_of_base(chr: char, base: int): bool =
+  to_digit_of_base(chr, base) < base
+
+proc parse_base(str: string, base: int): float64 =
+  var point = str.find('.')
+  if point == -1:
+    point = str.len
+  var
+    cur = point - 1
+    cur_base = 1.0
+  while cur >= 0:
+    if not is_digit_of_base(str[cur], base):
+      break
+    result += float64(str[cur].to_digit_of_base(base)) * cur_base
+    cur_base *= base.float64
+    cur -= 1
+  cur_base = 1.0
+  cur = point + 1
+  while cur < str.len:
+    if not is_digit_of_base(str[cur], base):
+      break
+    cur_base /= base.float64
+    result += float64(str[cur].to_digit_of_base(base)) * cur_base
+    cur += 1
+  if str.is_negative():
+    result *= -1
+
+proc parse_value(str: string): float64 =
+  var base = 10
+  case str.get_base():
+    of 'B': base = 2
+    of '#': base = 16
+    of 'o': base = 8
+    else: discard
+  if base == 10:
+    return str.parse_float()
+  return str.parse_base(base)
+
 proc parse(iter: var TokenIter, level: int = 0): Node =
   if iter.take(TokenValue):
-    result = Node(kind: NodeValue, value: iter.token().value.parse_float())
+    result = Node(kind: NodeValue, value: iter.token().value.parse_value())
   elif iter.take(TokenName):
     if iter.token().value == "-":
       let node = iter.parse(4)
