@@ -93,11 +93,19 @@ proc make_token(str: string): Token =
   return Token(kind: TokenName, value: str)
 
 proc tokenize(str: string): seq[Token] =
-  type Mode = enum ModeNone, ModeString
+  type
+    Mode = enum ModeNone, ModeString
+    StrKind = enum StrNone, StrNumber, StrOperator
   var
     it = 0
     cur = ""
+    cur_kind = StrNone
     mode = ModeNone
+  template push_token() =
+    if cur != "":
+      result.add(make_token(cur))
+      cur_kind = StrNone
+      cur = ""
   while it < str.len:
     let chr = str[it]
     
@@ -112,21 +120,24 @@ proc tokenize(str: string): seq[Token] =
       of ModeNone:
         case chr:
           of ' ', '(', ')', '\n', ',', '\"':
-            if cur != "":
-              result.add(make_token(cur))
-              cur = ""
+            push_token()
             case chr:
               of '(': result.add(Token(kind: TokenOpen))
               of ')': result.add(Token(kind: TokenClose))
               of '\"': mode = ModeString
               else: discard
-          else:
+          of '0'..'9', '.':
+            if cur_kind == StrOperator:
+              push_token()
+            cur_kind = StrNumber
             cur &= chr
-
+          else:
+            if cur_kind == StrNumber:
+              push_token()
+            cur_kind = StrOperator
+            cur &= chr
     it += 1
-
-  if cur != "":
-    result.add(make_token(cur))
+  push_token()
 
 type
   TokenIter = object
@@ -138,20 +149,47 @@ proc next(iter: TokenIter, kind: TokenKind): bool =
     return false
   return iter.tokens[iter.cur].kind == kind
 
+proc next(iter: TokenIter, kinds: openArray[TokenKind]): bool =
+  if iter.cur + kinds.len > iter.tokens.len:
+    return false
+  for it, kind in kinds:
+    if kind != iter.tokens[iter.cur + it].kind:
+      return false
+  return true
+
 proc take(iter: var TokenIter, kind: TokenKind): bool =
   if iter.next(kind):
     iter.cur += 1
     return true
   return false
 
+proc take(iter: var TokenIter, kinds: openArray[TokenKind]): bool =
+  if iter.next(kinds):
+    iter.cur += kinds.len
+    return true
+  return false
+
 proc is_done(iter: TokenIter): bool = iter.cur >= iter.tokens.len
 proc token(iter: TokenIter): Token = iter.tokens[iter.cur - 1]
 
-proc back(iter: var TokenIter) = iter.cur -= 1
+proc back(iter: var TokenIter, token_count: int = 1) = iter.cur -= token_count
 
 proc parse(iter: var TokenIter, level: int = 0): Node =
   if iter.take(TokenValue):
     result = Node(kind: NodeValue, value: iter.token().value.parse_float())
+  elif iter.take(TokenName):
+    if iter.token().value == "-":
+      let node = iter.parse(4)
+      if node.is_nil:
+        return nil
+      result = Node(kind: NodeMul,
+        a: Node(kind: NodeValue, value: -1),
+        b: node
+      )
+    elif iter.token().value == "+":
+      result = iter.parse(4)
+    else:
+      iter.back()
   elif iter.take(TokenOpen):
     result = iter.parse()
     discard iter.take(TokenClose)
