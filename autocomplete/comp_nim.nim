@@ -255,7 +255,7 @@ proc exec(ctx: Context, job: Job) {.async.} =
         if parts.len < 3:
           continue
         let
-          text = to_runes(parts[2].split(".")[1..^1].join("."))
+          text = to_runes(parts[2].split(".")[^1])
           style = ctx.get_case_style(job.buffer)
         var styled = text
         if style == CaseSnake or style == CaseCamel:
@@ -377,4 +377,6 @@ method buffer_info(ctx: Context, buffer: Buffer): seq[string] =
     of CasePascal: return @["Pascal Case"]
 
 proc make_nim_autocompleter*(): Autocompleter =
+  if find_exe("nimsuggest") == "":
+    return nil
   return make_context()

@@ -539,16 +539,10 @@ proc save_as(editor: Editor, inputs: seq[seq[Rune]]) =
   editor.buffer.save()
   editor.hide_prompt()
 
-  if editor.buffer.language != nil:
-    let id = editor.buffer.language.id
-    if id in editor.app.autocompleters:
-      editor.autocompleter = editor.app.autocompleters[id]
-    else:
-      if editor.buffer.language.make_autocompleter != nil:
-        let autocompleter = editor.buffer.language.make_autocompleter()
-        editor.app.autocompleters[id] = autocompleter
-        editor.autocompleter = autocompleter
-        autocompleter.track(editor.buffer)
+  let comp = editor.app.get_autocompleter(editor.buffer.language)
+  if not comp.is_nil:
+    editor.autocompleter = comp
+    comp.track(editor.buffer)
 
 proc select_all(editor: Editor) =
   editor.cursors = @[Cursor(
@@ -601,11 +595,7 @@ proc load_file(editor: Editor, path: string) =
   editor.cursor_hook_id = editor.buffer.register_hook(editor.make_cursor_hook())
   editor.hide_prompt()
   editor.cursors = @[Cursor(kind: CursorInsert, pos: 0)]
-  editor.autocompleter = nil
-  if editor.buffer.language != nil:
-    let id = editor.buffer.language.id
-    if id in editor.app.autocompleters:
-      editor.autocompleter = editor.app.autocompleters[id]
+  editor.autocompleter = editor.app.get_autocompleter(editor.buffer.language)
 
 proc new_buffer(editor: Editor) =
   editor.buffer.unregister_hook(editor.cursor_hook_id)
@@ -1459,11 +1449,7 @@ proc make_editor*(app: App, buffer: Buffer): Editor =
     app: app
   )
   result.cursor_hook_id = result.buffer.register_hook(result.make_cursor_hook())
-
-  if result.buffer.language != nil:
-    let id = result.buffer.language.id
-    if id in result.app.autocompleters:
-      result.autocompleter = app.autocompleters[id]
+  result.autocompleter = app.get_autocompleter(result.buffer.language)
 
 proc make_editor*(app: App): Window =
   make_editor(app, make_buffer())

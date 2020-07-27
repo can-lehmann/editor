@@ -42,7 +42,7 @@ const
     "shl", "shr", "static", "template", "try", "tuple", "type",
     "using", "var", "when", "while", "xor", "yield",
     
-    "owned", "echo"
+    "owned", "echo", "await"
   ]
   
   NIM_TYPES = [

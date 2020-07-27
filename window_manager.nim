@@ -448,18 +448,27 @@ proc make_app*(languages: seq[Language], window_constructors: seq[WindowConstruc
     buffers: init_table[string, Buffer]()
   )
 
+proc get_autocompleter*(app: App, language: Language): Autocompleter =
+  if language.is_nil:
+    return nil
+  if language.make_autocompleter.is_nil:
+    return nil
+  if language.id notin app.autocompleters:
+    let autocompleter = language.make_autocompleter()
+    if autocompleter.is_nil:
+      return nil
+    app.autocompleters[language.id] = autocompleter
+  return app.autocompleters[language.id]
+
 proc make_buffer*(app: App, path: string): Buffer =
   if app.buffers.has_key(path):
     return app.buffers[path]
   result = make_buffer(path, app.languages)
   app.buffers[path] = result
   
-  if result.language != nil:
-    if result.language.make_autocompleter == nil:
-      return
-    if result.language.id notin app.autocompleters:
-      app.autocompleters[result.language.id] = result.language.make_autocompleter()
-    app.autocompleters[result.language.id].track(result)
+  let comp = app.get_autocompleter(result.language)
+  if not comp.is_nil:
+    comp.track(result)
 
 proc is_changed*(app: App, path: string): bool =
   if not app.buffers.has_key(path):
