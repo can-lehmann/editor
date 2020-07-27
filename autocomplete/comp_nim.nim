@@ -20,8 +20,9 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import osproc, unicode, strutils, sequtils, sugar, sets, deques
-import net, times, os, streams, random, selectors, tables, hashes
+import unicode, strutils, os, tables, sets, hashes, streams
+import sugar, sequtils, times, osproc, deques, nativesockets
+import asyncdispatch, asyncnet, asyncfile, selectors
 import ../buffer, ../utils
 
 type
@@ -29,42 +30,45 @@ type
 
   CompCallback = proc (comps: seq[Completion])
   DefsCallback = proc (defs: seq[Definition])
-
-  JobKind = enum JobDefs, JobComp, JobTrack
   
-  Job = object
-    path: string
-    data: string
-    chan: ptr Channel[(bool, string)]
-    thread: Thread[(ptr Channel[(bool, string)], string, Port)]
-    buffer: Buffer  
+  JobKind = enum JobComp, JobDefs
+  Job = object  
+    buffer: Buffer
     case kind: JobKind:
-      of JobDefs:
-        defs_callback: DefsCallback
       of JobComp:
-        pos: int
-        case_style: CaseStyle
-        comp_callback: CompCallback
-      of JobTrack: discard
-    
+        comp_pos: int
+        comp_cb: CompCallback
+      of JobDefs:
+        defs_cb: DefsCallback
+
   Context = ref ContextObj
   ContextObj = object of Autocompleter
-    gen: Rand
-
-    nimsuggest: Process
-    port: Port
-    when not defined(windows):
-      stdout_selector: Selector[pointer]
-    
-    jobs: seq[Job]
-    waiting: Deque[Job]
-
     folder: string
+    file_id: int
+    
     tracked: HashSet[Buffer]
     case_styles: Table[Buffer, CaseStyle]
+    
+    waiting: Deque[Job]
+    
+    nimsuggest: Process
+    port: Port
+    is_restarting: bool
+    
+    when not defined(windows):
+      stdout_selector: Selector[pointer]
+
+proc peek[T](hash_set: HashSet[T]): T =
+  for item in hash_set:
+    return item
 
 proc hash(buffer: Buffer): Hash =
   return buffer.file_path.hash()
+
+proc get_case_style(ctx: Context, buffer: Buffer): CaseStyle =
+  result = CaseUnknown
+  if buffer in ctx.case_styles:
+    result = ctx.case_styles[buffer]
 
 proc case_style(name: seq[Rune]): CaseStyle =
   for it, chr in name:
@@ -108,6 +112,19 @@ proc convert_case(name: seq[Rune], from_style, to_style: CaseStyle): seq[Rune] =
     of CasePascal:
       return parts.map(part => part.capitalize).join()
 
+proc detect_case_style(defs: seq[Definition]): CaseStyle =
+  var counts: array[CaseStyle, int]
+  for def in defs:
+    counts[def.name.case_style()] += 1
+  var max_count = 0
+  result = CaseCamel
+  for style, count in counts:
+    if style == CaseUnknown or style == CasePascal:
+      continue
+    if count > max_count:
+      max_count = count
+      result = style
+
 proc to_comp_kind(str: string): CompKind =
   case str:
     of "skUnknown": return CompUnknown
@@ -143,12 +160,25 @@ proc to_def_kind(str: string): DefKind =
     of "skFunc": return DefFunc
     else: return DefUnknown
 
-proc create_temp_folder(gen: var Rand): string =
-  var name = ".temp" & $gen.next()
-  while exists_dir(name):
-    name &= $get_time().to_unix()
-  create_dir(name)
-  return name
+proc create_temp_folder(): string =
+  var id = get_time().to_unix()
+  while exists_dir(".temp" & $id):
+    id += 1
+  create_dir(".temp" & $id)
+  return ".temp" & $id
+
+proc save_temp_buffer(ctx: Context, buffer: Buffer): Future[string] {.async.} =
+  try:
+    let id = ctx.file_id
+    ctx.file_id += 1
+    result = ctx.folder / ("file" & $id & ".nim")
+    if not exists_dir(ctx.folder):
+      create_dir(ctx.folder)
+    let file = open_async(result, fmWrite)
+    await file.write($buffer.text)
+    file.close()
+  except IOError, FutureError, OSError:
+    return ""
 
 proc make_context(): Context =
   result = Context(
@@ -163,285 +193,180 @@ proc make_context(): Context =
       Rune('@'),
       Rune(')'), Rune('}'), Rune(']'), Rune('{')
     ],
-    nimsuggest: nil,
-    gen: init_rand(get_time().to_unix()),
     min_word_len: 5
   )
   when not defined(windows):
     result.stdout_selector = new_selector[pointer]()
-  result.folder = create_temp_folder(result.gen)
+  result.folder = create_temp_folder()
 
-proc find_nimsuggest(): string =
-  return find_exe("nimsuggest")
+proc has_nimsuggest(ctx: Context): bool =
+  ctx.nimsuggest != nil and
+  ctx.port != Port(0) and
+  ctx.nimsuggest.running
+
+proc restart_nimsuggest(ctx: Context)
+
+proc recv_lines(socket: AsyncSocket): Future[seq[string]] {.async.} =
+  var lines: seq[string]
+  while true:
+    let line = await socket.recv_line()
+    if line.len == 0:
+      break
+    lines.add(line)
+  return lines
+
+proc exec(ctx: Context, job: Job) {.async.} =
+  case job.kind:
+    of JobDefs:
+      let socket = new_async_socket()
+      await socket.connect("127.0.0.1", ctx.port)
+      await socket.send("outline " & job.buffer.file_path & "\n")
+      let lines = await socket.recv_lines()
+      socket.close()
+      
+      var defs: seq[Definition]
+      for line in lines:
+        let parts = line.strip(chars={'\r', '\n'}).split("\t")
+        if parts.len < 7:
+          continue
+        defs.add(Definition(
+          kind: parts[1].to_def_kind(),
+          name: to_runes(parts[2].split(".")[1..^1].join(".")),
+          pos: Index2d(
+            x: parse_int(parts[6]),
+            y: parse_int(parts[5]) - 1
+          )
+        ))
+      job.defs_cb(defs)
+      ctx.case_styles[job.buffer] = defs.detect_case_style()
+    of JobComp:
+      let socket = new_async_socket()
+      await socket.connect("127.0.0.1", ctx.port)
+      let
+        temp = await ctx.save_temp_buffer(job.buffer)
+        pos = job.buffer.to_2d(job.comp_pos)
+      await socket.send("sug " & job.buffer.file_path & ";" & temp & ":" & $(pos.y + 1) & ":" & $pos.y & "\n")
+      let lines = await socket.recv_lines()
+      socket.close()
+      
+      var comps: seq[Completion]
+      for line in lines:
+        let parts = line.strip(chars={'\r', '\n'}).split("\t")
+        if parts.len < 3:
+          continue
+        let
+          text = to_runes(parts[2].split(".")[1..^1].join("."))
+          style = ctx.get_case_style(job.buffer)
+        var styled = text
+        if style == CaseSnake or style == CaseCamel:
+          styled = text.convert_case(text.case_style(), style)
+        comps.add(Completion(
+          kind: to_comp_kind(parts[1]),
+          text: styled
+        ))
+      job.comp_cb(comps)
+
+proc enqueue(ctx: Context, job: Job) =
+  if ctx.has_nimsuggest():
+    async_check ctx.exec(job)
+    return
+  ctx.waiting.add_last(job)
+  ctx.restart_nimsuggest()
+
+proc read_port(ctx: Context) =
+  let line = ctx.nimsuggest.output_stream.read_line()
+  ctx.port = Port(parse_int(line))
+  ctx.is_restarting = false
 
 proc restart_nimsuggest(ctx: Context) =
-  let path = find_nimsuggest()
-  if path.len == 0:
+  if ctx.is_restarting and ctx.nimsuggest.running:
     return
-  if ctx.tracked.len == 0:
-    return
-  let buffer = ctx.tracked.pop()
-  ctx.nimsuggest = start_process(path, args=[
-    "--address:127.0.0.1", "--autobind", buffer.file_path
-  ], options={poInteractive})
-  
-  for buf in ctx.tracked:
-    ctx.waiting.add_first(Job(
-      kind: JobTrack,
-      buffer: buf
-    ))
-  
-  ctx.tracked.incl(buffer)
-
-proc send_command(ctx: Context, command: string): Socket =
-  let socket = new_socket()
-  try:
-    socket.connect("localhost", ctx.port)
-    socket.send(command & "\n")
-    return socket
-  except OSError:
-    socket.close()
-    if not ctx.nimsuggest.running:
-      ctx.nimsuggest.close()
-      ctx.nimsuggest = nil
-      ctx.port = Port(0)
-      ctx.restart_nimsuggest()
-    return nil
-
-method close(ctx: Context) =
-  ctx.poll()
   
   if ctx.nimsuggest != nil:
-    try:
-      discard ctx.send_command("quit")
-      discard ctx.nimsuggest.wait_for_exit(timeout=1000)
-      ctx.nimsuggest.close()
-    except OSError:
-      echo "OSError"
-
-  remove_dir(ctx.folder)
-
-proc handle(job: Job) =
-  case job.kind:
-    of JobComp:
-      var comps: seq[Completion] = @[]
-      for line in job.data.split('\n'):
-        if line.len == 0:
-          continue
-        let values = line.split('\t')
-        if values.len < 3:
-          continue
-        var text = values[2].split('.')[^1].to_runes()
-        let text_case = text.case_style()
-        if text_case == CaseSnake or text_case == CaseCamel:
-          text = text.convert_case(text_case, job.case_style)
-        comps.add(Completion(
-          text: text,
-          kind: values[1].to_comp_kind()
-        ))
-      
-      job.comp_callback(comps)
-    of JobDefs:
-      var defs: seq[Definition] = @[]
-      for line in job.data.split('\n'):
-        if line.len == 0:
-          continue
-        let values = line.split('\t')
-        if values.len < 7:
-          continue
-        
-        try:
-          defs.add(Definition(
-            kind: to_def_kind(values[1]),
-            name: to_runes(values[2].split('.')[1.. ^1].join(".")),
-            pos: Index2d(
-              x: values[6].parse_int(),
-              y: values[5].parse_int() - 1
-            )
-          ))
-        except ValueError:
-          discard
-      job.defs_callback(defs)
-    else: discard
-  remove_file(job.path)
-
-proc save_temp(ctx: Context, buffer: Buffer): string =
-  try:
-    let 
-      file_name = $get_time().to_unix() & "_" & $ctx.gen.next() & ".nim"
-      tmp_path = ctx.folder / file_name
-    write_file(tmp_path, $buffer.text)
-    return tmp_path
-  except IOError:
+    ctx.nimsuggest.close()
+    ctx.port = Port(0)
+    ctx.nimsuggest = nil
+  if ctx.tracked.len == 0:
     return
+  let project_buffer = ctx.tracked.peek()
+  ctx.is_restarting = true
+  ctx.nimsuggest = start_process(find_exe("nimsuggest"), args=[
+    "--autobind", "--address:127.0.0.1", project_buffer.file_path
+  ])
+  when defined(windows):
+    ctx.read_port()
 
-proc read(args: (ptr Channel[(bool, string)], string, Port)) =
-  let socket = new_socket()
+proc send_command(ctx: Context, cmd: string) =
+  if not ctx.has_nimsuggest():
+    return
+  let socket = new_async_socket()
   try:
-    socket.connect("localhost", args[2])
-    socket.send(args[1])
+    wait_for socket.connect("127.0.0.1", ctx.port)
+    wait_for socket.send(cmd & "\n")
+    socket.close()
   except OSError:
     socket.close()
-    args[0][].send((false, ""))
-    return
-  var data = ""
-  while true:
-    var packet: string
-    try:
-      packet = socket.recv(512)
-    except OSError:
-      break
-    if packet.len == 0:
-      break
-    data &= packet
-  args[0][].send((true, data))
-  socket.close()
+    if not ctx.has_nimsuggest():
+      ctx.restart_nimsuggest()
 
-proc execute(ctx: Context, job: Job) =
-  case job.kind:
-    of JobTrack:
-      let sock = ctx.send_command("mod " & job.buffer.file_path)
-      if sock != nil:
-        sock.close()
-    of JobComp, JobDefs:
-      let tmp_path = ctx.save_temp(job.buffer)
-      if tmp_path.len == 0:
-        return
+method close(ctx: Context) =
+  if has_pending_operations():
+    drain(timeout=4)
+    
+  if ctx.nimsuggest != nil:
+    try:
+      ctx.send_command("quit")
+      discard ctx.nimsuggest.wait_for_exit(timeout=1000)
+    except OSError:
+      discard
   
-      var command: string
-      case job.kind:
-        of JobComp:
-          let index = job.buffer.to_2d(job.pos)
-          command = "sug " & job.buffer.file_name & ";" & tmp_path & ":" & $(index.y + 1) & ":" & $(index.x)
-        of JobDefs:
-          command = "outline " & job.buffer.file_name & ";" & tmp_path
-        else: discard
-      command &= "\n"
-      
-      ctx.jobs.add(job)
-      ctx.jobs[^1].path = tmp_path
-      let chan = cast[ptr Channel[(bool, string)]](
-        alloc_shared0(sizeof Channel[(bool, string)])
-      )
-      chan[].open()
-      ctx.jobs[^1].chan = chan
-      create_thread(ctx.jobs[^1].thread, read, (ctx.jobs[^1].chan, command, ctx.port))
+  if exists_dir(ctx.folder):
+    remove_dir(ctx.folder)
+
+proc exec_waiting(ctx: Context) {.async.} =
+  while ctx.waiting.len > 0 and ctx.has_nimsuggest():
+    await ctx.exec(ctx.waiting.pop_first())
 
 method poll(ctx: Context) =
-  if ctx.nimsuggest == nil:
-    ctx.restart_nimsuggest()
-    return
+  if has_pending_operations():
+    drain(0)
   
-  if ctx.port == Port(0):
-    when defined(windows):
-      if not ctx.nimsuggest.has_data():
-        return
-    else:
-      let handle = ctx.nimsuggest.output_handle.int
+  when not defined(windows):
+    if ctx.is_restarting and ctx.nimsuggest.running:
+      let handle = ctx.nimsuggest.output_handle().int
       ctx.stdout_selector.register_handle(handle, {Read}, nil)
-      let selected = ctx.stdout_selector.select(0)
+      let count = ctx.stdout_selector.select(0).len
       ctx.stdout_selector.unregister(handle)
-      if selected.len == 0:
-        return
-    try:
-      ctx.port = Port(ctx.nimsuggest.output_stream().read_line().parse_int())
-    except IOError, ValueError:
-      ctx.nimsuggest.close()
-      ctx.nimsuggest = nil
-      ctx.port = Port(0)
-      ctx.restart_nimsuggest()
-      return
-    for job in ctx.waiting:
-      ctx.execute(job)
-    ctx.waiting = init_deque[Job]()
-    return
+      if count > 0:
+        ctx.read_port()
   
-  var it = 0
-  while it < ctx.jobs.len:
-    var  
-      (has_msg, message) = ctx.jobs[it].chan[].try_recv()
-      (success, data) = message
-    if not has_msg:
-      it += 1
-      continue
-    if success:
-      ctx.jobs[it].data = data
-      handle(ctx.jobs[it])
-    
-    if not success and not ctx.nimsuggest.running:
-      ctx.nimsuggest.close()
-      ctx.nimsuggest = nil
-      ctx.port = Port(0)
-      ctx.restart_nimsuggest()
-      for it2 in 0..<ctx.jobs.len:
-        if ctx.jobs[it2].thread.running:
-          ctx.jobs[it2].thread.join_thread()
-        if ctx.jobs[it2].chan != nil:
-          ctx.jobs[it2].chan[].close()
-          dealloc_shared(ctx.jobs[it2].chan)
-          ctx.jobs[it2].chan = nil
-        ctx.waiting.add_last(ctx.jobs[it2])
-      ctx.jobs = @[]
-      break
-
-    if ctx.jobs[it].thread.running:
-      ctx.jobs[it].thread.join_thread()
-    ctx.jobs[it].chan[].close()
-    dealloc_shared(ctx.jobs[it].chan)
-    ctx.jobs.del(it)
-
-proc add_waiting(ctx: Context, job: Job) =
-  if ctx.nimsuggest == nil:
-    ctx.waiting.add_last(job)
-    ctx.restart_nimsuggest()
-  elif ctx.port == Port(0):
-    ctx.waiting.add_last(job)
-  else:
-    ctx.poll()
-    ctx.execute(job)
+  if ctx.has_nimsuggest() and ctx.waiting.len > 0:
+    async_check ctx.exec_waiting()
 
 method track(ctx: Context, buffer: Buffer) =
   ctx.tracked.incl(buffer)
-  if ctx.nimsuggest == nil:
-    ctx.restart_nimsuggest()
-  else:
-    ctx.poll()
-    ctx.add_waiting(Job(kind: JobTrack, buffer: buffer))
-  ctx.add_waiting(Job(kind: JobDefs,
+  ctx.enqueue(Job(kind: JobDefs,
     buffer: buffer,
-    defs_callback: proc (defs: seq[Definition]) =
-      var style_counts: array[CaseStyle, int]
-      for def in defs:
-         style_counts[def.name.split('.')[^1].case_style()] += 1
-      if style_counts[CaseCamel] < style_counts[CaseSnake]:
-        ctx.case_styles[buffer] = CaseSnake
-      else:
-        ctx.case_styles[buffer] = CaseCamel
+    defs_cb: proc (defs: seq[Definition]) = discard
   ))
-
-proc get_case_style(ctx: Context, buffer: Buffer): CaseStyle =
-  result = CaseUnknown
-  if buffer in ctx.case_styles:
-    result = ctx.case_styles[buffer]
 
 method complete(ctx: Context,
                 buffer: Buffer,
                 pos: int,
                 trigger: Rune,
                 callback: CompCallback) =
-  ctx.add_waiting(Job(kind: JobComp,
+  ctx.enqueue(Job(kind: JobComp,
     buffer: buffer,
-    pos: pos,
-    comp_callback: callback,
-    case_style: ctx.get_case_style(buffer)
+    comp_cb: callback,
+    comp_pos: pos
   ))
 
 method list_defs(ctx: Context,
                  buffer: Buffer,
                  callback: DefsCallback) =
-  ctx.add_waiting(Job(kind: JobDefs,
+  ctx.enqueue(Job(kind: JobDefs,
     buffer: buffer,
-    defs_callback: callback
+    defs_cb: callback
   ))
 
 method buffer_info(ctx: Context, buffer: Buffer): seq[string] =
