@@ -33,7 +33,7 @@ type
     entry: Entry
   
   PromptKind = enum PromptNone, PromptActive, PromptInactive, PromptInfo
-    
+  
   PromptCallbackProc = proc (editor: Editor, inputs: seq[seq[Rune]])
   Prompt = object
     case kind: PromptKind:
@@ -757,7 +757,25 @@ proc show_replace(editor: Editor) =
   )
 
 proc show_save_as(editor: Editor) =
-  editor.show_prompt("Save As", @["File Name:"], callback=save_as)
+  editor.show_prompt(
+    "Save As",
+    @["File Name:"],
+    callback=proc (editor: Editor, inputs: seq[seq[Rune]]) =
+      let path = $inputs[0]
+      if exists_file(path):
+        editor.show_prompt(
+          "A file named " & path &
+          " already exists. Do you want to replace it?",
+          @["Replace (y/n): "],
+          callback=proc (editor: Editor, replace_inputs: seq[seq[Rune]]) =
+            if to_lower($replace_inputs[0]).starts_with("y"):
+              editor.save_as(inputs)
+            else:
+              editor.hide_prompt()
+        )
+      else:
+        editor.save_as(inputs)
+  )
 
 proc save(editor: Editor) =
   if editor.buffer.file_path == "":
