@@ -872,9 +872,14 @@ method process_key(editor: Editor, key: Key) =
         return
       if key.alt and key.shift:
         var index = editor.buffer.to_2d(editor.primary_cursor().get_pos())
-        index.y -= 1
-        index.y = max(index.y, 0) 
-        editor.cursors.add(Cursor(kind: CursorInsert, pos: editor.buffer.to_index(index)))
+        while true:
+          index.y -= 1
+          if index.y < 0:
+            break
+          let cursor = Cursor(kind: CursorInsert, pos: editor.buffer.to_index(index))
+          if cursor notin editor.cursors:
+            editor.cursors.add(cursor)
+            break
       else:
         for it, cursor in editor.cursors:
           var index = editor.buffer.to_2d(cursor.get_pos())
@@ -886,9 +891,14 @@ method process_key(editor: Editor, key: Key) =
         return
       if key.alt and key.shift:
         var index = editor.buffer.to_2d(editor.primary_cursor().get_pos())
-        index.y += 1
-        index.y = min(index.y, editor.buffer.lines.len - 1) 
-        editor.cursors.add(Cursor(kind: CursorInsert, pos: editor.buffer.to_index(index)))
+        while true:
+          index.y += 1
+          if index.y > editor.buffer.lines.len - 1:
+            break 
+          let cursor = Cursor(kind: CursorInsert, pos: editor.buffer.to_index(index))
+          if cursor notin editor.cursors:
+            editor.cursors.add(cursor)
+            break
       else:
         for it, cursor in editor.cursors:
           var index = editor.buffer.to_2d(cursor.get_pos())
