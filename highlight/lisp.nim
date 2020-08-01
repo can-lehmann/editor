@@ -42,7 +42,7 @@ const
 proc token_kind(name: seq[Rune], is_call: bool, is_quote: bool): TokenKind =
   if is_quote:
     return TokenLiteral
-  elif name.is_int or name.is_float or startswith($name, ':'):
+  elif name.is_int or name.is_float:
     return TokenLiteral
   elif $name in ["true", "false", "nil"]:
     return TokenLiteral
@@ -71,7 +71,7 @@ method next*(state: State, text: seq[Rune]): Token =
         it = text.skip_string_like(start + 1)
         state = State(it: it + 1, quote_depths: state.quote_depths, depth: state.depth)
       return Token(kind: TokenString, start: start, stop: it + 1, state: state)
-    of '\'':
+    of '\'', ':':
       let new_state = State(it: start + 1, is_quote: true, quote_depths: state.quote_depths, depth: state.depth)
       return Token(kind: TokenLiteral, start: start, stop: start + 1, state: new_state)
     of '(', '[', '{':

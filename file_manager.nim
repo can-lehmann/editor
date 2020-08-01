@@ -124,6 +124,13 @@ method process_mouse(file_manager: FileManager, mouse: Mouse): bool =
           file_manager.app.root_pane.open_window(editor)
         else: discard
 
+proc go_up(file_manager: FileManager) =
+  if file_manager.path.parent_dir() != "":
+    file_manager.open(file_manager.path.parent_dir())
+
+proc go_home(file_manager: FileManager) =
+  file_manager.open(get_home_dir())
+
 method process_key(file_manager: FileManager, key: Key) =
   case key.kind:
     of KeyReturn:
@@ -143,11 +150,19 @@ method process_key(file_manager: FileManager, key: Key) =
       file_manager.mode = Mode(kind: ModeNone)
       file_manager.update_list()
     else:
+      if key.kind == KeyChar and key.ctrl:
+        var done = true
+        case key.chr:
+          of 'h': file_manager.go_home()
+          else: done = false
+        if done:
+          return
+      
       case file_manager.mode.kind:
         of ModeNone:
           case key.kind:
             of KeyBackspace:
-              file_manager.open(file_manager.path.parent_dir())
+              file_manager.go_up()
             of KeyChar:
               file_manager.mode = Mode(kind: ModeSearch,
                 search_entry: make_entry(file_manager.app.copy_buffer)
@@ -158,6 +173,19 @@ method process_key(file_manager: FileManager, key: Key) =
         of ModeSearch:
           file_manager.mode.search_entry.process_key(key)
           file_manager.update_list()
+
+method list_commands(file_manager: FileManager): seq[Command] =
+  return @[
+    Command(
+      name: "Go up",
+      cmd: () => file_manager.go_up()
+    ),
+    Command(
+      name: "Go home",
+      cmd: () => file_manager.go_home(),
+      shortcut: @[Key(kind: KeyChar, chr: 'h', ctrl: true)]
+    )
+  ]
 
 method render(file_manager: FileManager, box: Box, ren: var TermRenderer) =
   case file_manager.mode.kind:
