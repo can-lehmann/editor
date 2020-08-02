@@ -23,7 +23,7 @@
 import unicode, strutils, os, tables, sets, hashes, streams
 import sugar, sequtils, times, osproc, deques, nativesockets
 import asyncdispatch, asyncnet, asyncfile, selectors
-import ../buffer, ../utils
+import ../buffer, ../utils, ../log
 
 type
   CaseStyle = enum CaseUnknown, CaseCamel, CaseSnake, CasePascal
@@ -43,6 +43,7 @@ type
 
   Context = ref ContextObj
   ContextObj = object of Autocompleter
+    log: Log
     folder: string
     file_id: int
     
@@ -180,7 +181,7 @@ proc save_temp_buffer(ctx: Context, buffer: Buffer): Future[string] {.async.} =
   except IOError, FutureError, OSError:
     return ""
 
-proc make_context(): Context =
+proc make_context(log: Log): Context =
   result = Context(
     triggers: @[
       Rune('.'), Rune('('), Rune('[')
@@ -193,7 +194,8 @@ proc make_context(): Context =
       Rune('@'),
       Rune(')'), Rune('}'), Rune(']'), Rune('{')
     ],
-    min_word_len: 5
+    min_word_len: 5,
+    log: log
   )
   when not defined(windows):
     result.stdout_selector = new_selector[pointer]()
@@ -281,6 +283,7 @@ proc read_port(ctx: Context) =
 proc restart_nimsuggest(ctx: Context) =
   if ctx.is_restarting and ctx.nimsuggest.running:
     return
+  ctx.log.add_warning("comp_nim", "Restarting nimsuggest process")
   
   if ctx.nimsuggest != nil:
     ctx.nimsuggest.close()
@@ -376,7 +379,8 @@ method buffer_info(ctx: Context, buffer: Buffer): seq[string] =
     of CaseSnake: return @["Snake Case"]
     of CasePascal: return @["Pascal Case"]
 
-proc make_nim_autocompleter*(): Autocompleter =
+proc make_nim_autocompleter*(log: Log): Autocompleter =
   if find_exe("nimsuggest") == "":
+    log.add_error("comp_nim", "Could not find nimsuggest")
     return nil
-  return make_context()
+  return make_context(log)

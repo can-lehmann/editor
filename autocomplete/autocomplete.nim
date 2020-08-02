@@ -21,12 +21,13 @@
 # SOFTWARE.
 
 import tables, unicode, algorithm
-import ../buffer, ../utils, ../highlight/highlight
+import ../buffer, ../utils, ../highlight/highlight, ../log
 
 type
   SimpleContext* = ref object of Autocompleter
     comps*: seq[Completion]
     defs*: Table[TokenKind, DefKind]
+    log*: Log
 
 method track(ctx: SimpleContext, buffer: Buffer) =
   discard

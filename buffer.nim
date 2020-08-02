@@ -21,7 +21,7 @@
 # SOFTWARE.
 
 import strutils, unicode, sequtils, sugar, tables
-import utils, highlight/highlight
+import utils, highlight/highlight, log
 
 type
   DefKind* = enum
@@ -62,7 +62,7 @@ type
     file_exts*: seq[string]
     indent_width*: int
     snippets*: Table[seq[Rune], seq[Rune]]
-    make_autocompleter*: proc (): Autocompleter
+    make_autocompleter*: proc (log: Log): Autocompleter
 
   ActionKind = enum ActionDelete, ActionInsert
 

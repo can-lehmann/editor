@@ -1,5 +1,5 @@
 # MIT License
-# 
+#
 # Copyright (c) 2019 - 2020 pseudo-random <josh.leh.2018@gmail.com>
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -8,7 +8,7 @@
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
 #
@@ -20,41 +20,48 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import tables, unicode, sequtils, sugar
-import ../utils, ../buffer, ../highlight/highlight, autocomplete, ../log
+import times
 
-proc new_markdown_autocompleter*(log: Log): Autocompleter =
-  SimpleContext(
-    defs: to_table({
-      TokenHeading: DefHeading
-    }),
-    log: log
-  )
+type
+  LogLevel* = enum
+    LogInfo, LogWarning, LogError
+  
+  LogEntry* = object
+    level*: LogLevel
+    module*: string
+    message*: string
+    time*: Time
+  
+  Log* = ref object
+    history*: seq[LogEntry]
+    enabled*: bool
 
-const HTML_TAGS = map(@[
-  "html", "head", "meta", "title", "body", "p",
-  "div", "span", "h1", "h2", "h3", "h4", "h5",
-  "h6", "iframe", "script", "img", "a",
-  "table", "thead", "tr", "td", "th", "tbody", "tfoot",
-  "caption", "input", "button", "code", "template",
-  "noscript", "textarea"
-], tag => Completion(kind: CompTag, text: to_runes(tag)))
+proc add*(log: Log, entry: LogEntry) =
+  if log.enabled:
+    log.history.add(entry)
+    log.history[^1].time = get_time()
 
-proc new_html_autocompleter*(log: Log): Autocompleter =
-  SimpleContext(
-    defs: to_table({
-      TokenTag: DefTag
-    }),
-    comps: HTML_TAGS,
-    triggers: @[
-      Rune('<'), Rune('/')
-    ],
-    finish: @[
-      Rune(' '), Rune('\n'), Rune('\r'), Rune('\t'),
-      Rune('='), Rune('>')
-    ],
-    min_word_len: 3,
-    log: log
-  )
+proc add_error*(log: Log, module, message: string) =
+  log.add(LogEntry(level: LogError, module: module, message: message))
 
+proc add_warning*(log: Log, module, message: string) =
+  log.add(LogEntry(level: LogWarning, module: module, message: message))
 
+proc add_info*(log: Log, module, message: string) =
+  log.add(LogEntry(level: LogInfo, module: module, message: message))
+
+proc enable*(log: Log) =
+  log.enabled = true
+  log.add_info("log", "Enable log")
+
+proc disable*(log: Log) =
+  log.add_info("log", "Disable log")
+  log.enabled = false
+
+proc clear*(log: Log) =
+  log.history = @[]
+
+proc make_log*(): Log =
+  result = Log()
+  when defined(enable_log):
+    result.enable()

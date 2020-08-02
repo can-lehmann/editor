@@ -20,8 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import strutils, tables, unicode, sequtils, sugar, hashes
-import utils, ui_utils, termdiff, buffer
+import strutils, tables, unicode, sequtils, sugar, hashes, times
+import utils, ui_utils, termdiff, buffer, log
 
 type
   Window* = ref object of RootObj
@@ -51,9 +51,9 @@ type
   WindowConstructor* = object
     name: string
     make: proc (app: App): Window
-
+  
   AppMode* = enum AppModeNone, AppModePane, AppModeNewPane
-      
+  
   App* = ref object
     root_pane*: Pane
     copy_buffer*: CopyBuffer
@@ -62,6 +62,7 @@ type
     mode*: AppMode
     buffers*: Table[string, Buffer]
     autocompleters*: Table[int, Autocompleter]
+    log*: Log
 
 method process_key*(window: Window, key: Key) {.base.} = quit "Not implemented: process_key"
 method process_mouse*(window: Window, mouse: Mouse): bool {.base.} = discard
@@ -445,7 +446,8 @@ proc make_app*(languages: seq[Language], window_constructors: seq[WindowConstruc
     root_pane: nil,
     languages: languages,
     window_constructors: window_constructors,
-    buffers: init_table[string, Buffer]()
+    buffers: init_table[string, Buffer](),
+    log: make_log()
   )
 
 proc get_autocompleter*(app: App, language: Language): Autocompleter =
@@ -454,7 +456,7 @@ proc get_autocompleter*(app: App, language: Language): Autocompleter =
   if language.make_autocompleter.is_nil:
     return nil
   if language.id notin app.autocompleters:
-    let autocompleter = language.make_autocompleter()
+    let autocompleter = language.make_autocompleter(app.log)
     if autocompleter.is_nil:
       return nil
     app.autocompleters[language.id] = autocompleter

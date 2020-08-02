@@ -22,7 +22,7 @@
 
 import unicode, tables, os
 import termdiff, window_manager, buffer
-import editor, keyinfo, calc, file_manager
+import editor, keyinfo, calc, file_manager, log_viewer  
 import highlight/lisp, highlight/json
 import highlight/html, highlight/markdown
 import highlight/cpp
@@ -99,7 +99,8 @@ var
     make_window_constructor("Editor", make_editor),
     make_window_constructor("File Manager", make_file_manager),
     make_window_constructor("Calc", make_calc),
-    make_window_constructor("Keyinfo", make_keyinfo)
+    make_window_constructor("Keyinfo", make_keyinfo),
+    make_window_constructor("Log Viewer", make_log_viewer)
   ]
 
 var
