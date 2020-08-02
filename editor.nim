@@ -530,13 +530,22 @@ proc save_as(editor: Editor, inputs: seq[seq[Rune]]) =
   if inputs[0].len == 0:
     return
   
-  let path = absolute_path($inputs[0])
+  let
+    path = absolute_path($inputs[0])
+    (dir, file) = split_path(path)
+  if not exists_dir(dir):
+    editor.show_info(@[dir & " does not exist"])
+    return
   if editor.buffer.file_path != "" and
      editor.buffer.file_path in editor.app.buffers:
     editor.app.buffers.del(editor.buffer.file_path)
   editor.buffer.set_path(path, editor.app.languages)
   editor.app.buffers[path] = editor.buffer
-  editor.buffer.save()
+  try:
+    editor.buffer.save()
+  except IOError as err:
+    editor.show_info(@["Error: " & err.msg])
+    return
   editor.hide_prompt()
 
   let comp = editor.app.get_autocompleter(editor.buffer.language)
@@ -781,7 +790,11 @@ proc save(editor: Editor) =
   if editor.buffer.file_path == "":
     editor.show_save_as()
   else:
-    editor.buffer.save()
+    try:
+      editor.buffer.save()
+    except IOError as err:
+      editor.show_info(@["Error: " & err.msg])
+      return
     editor.show_info(@["File saved."])
 
 proc show_quick_open(editor: Editor) =
