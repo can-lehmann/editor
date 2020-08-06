@@ -1497,4 +1497,3 @@ proc make_editor*(app: App): Window =
 
 proc make_editor*(app: App, path: string): Window =
   make_editor(app, app.make_buffer(path))
-

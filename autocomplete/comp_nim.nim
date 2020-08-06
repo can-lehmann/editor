@@ -270,10 +270,10 @@ proc exec(ctx: Context, job: Job) {.async.} =
           continue
         let
           text = to_runes(parts[2].split(".")[^1])
-          style = ctx.get_case_style(job.buffer)
+          style = text.case_style()
         var styled = text
         if style == CaseSnake or style == CaseCamel:
-          styled = text.convert_case(text.case_style(), style)
+          styled = text.convert_case(style, ctx.get_case_style(job.buffer))
         comps.add(Completion(
           kind: to_comp_kind(parts[1]),
           text: styled

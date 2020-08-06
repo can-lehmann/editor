@@ -38,7 +38,7 @@ var
     Language(
       name: "Nim",
       highlighter: new_nim_highlighter,
-      file_exts: @["nim", "nims"],
+      file_exts: @["nim", "nims", "nimble"],
       indent_width: 2,
       make_autocompleter: make_nim_autocompleter
     ),
