@@ -2,7 +2,7 @@
 A text editor written in Nim.
 
 ## Features
-- Quick Open 
+- Quick Open
 - Multiple Cursors
 - Automatic Indentation
 - Unicode Support (utf-8)

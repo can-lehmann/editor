@@ -248,8 +248,9 @@ proc exec(ctx: Context, job: Job) {.async.} =
       let socket = new_async_socket()
       await socket.connect("127.0.0.1", ctx.port)
       let pos = job.buffer.to_2d(job.comp_pos)
+      var temp = ""
       if job.buffer.len != 0:
-        let temp = await ctx.save_temp_buffer(job.buffer)
+        temp = await ctx.save_temp_buffer(job.buffer)
         await socket.send("sug " & job.buffer.file_path & ";" & temp & ":" & $(pos.y + 1) & ":" & $pos.y & "\n")
       else:
         await socket.send("sug " & job.buffer.file_path & ":" & $(pos.y + 1) & ":" & $pos.y & "\n")
@@ -280,6 +281,8 @@ proc exec(ctx: Context, job: Job) {.async.} =
         ))
       ctx.log.add_info("comp_nim", "Completion count: " & $comps.len)
       job.comp_cb(comps)
+      if temp != "" and exists_file(temp):
+        remove_file(temp)
 
 proc enqueue(ctx: Context, job: Job) =
   if ctx.has_nimsuggest():
