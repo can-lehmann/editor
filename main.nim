@@ -23,11 +23,9 @@
 import unicode, tables, os
 import termdiff, window_manager, buffer
 import editor, keyinfo, calc, file_manager, log_viewer  
-import highlight/lisp, highlight/json
-import highlight/html, highlight/markdown
-import highlight/cpp
-import autocomplete/comp_simple
-import highlight/nim, autocomplete/comp_nim
+import highlight/[lisp, json, html, markdown, cpp, nim]
+import autocomplete/[comp_nim, comp_simple]
+import tools/[base_tools]
 
 setup_term()
 system.add_quit_proc(quit_app)

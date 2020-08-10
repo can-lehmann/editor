@@ -77,20 +77,26 @@ type
         quick_open: QuickOpen
   
   # Editor
-  Editor = ref object of Window
-    buffer: Buffer
+  Editor* = ref object of Window
+    buffer*: Buffer
     prompt: Prompt
     dialog: Dialog
-    app: App
+    app*: App
     scroll: Index2d
     detach_scroll: bool
-    cursors: seq[Cursor]
+    cursors*: seq[Cursor]
     jump_stack: seq[int]
     cursor_hook_id: int
     window_size: Index2d
     autocompleter: Autocompleter
     completions: seq[Completion]
     completion_time: Time
+  
+  Tool* = object
+    name*: string
+    callback*: proc (editor: Editor)
+
+var editor_tools*: seq[Tool]
 
 # Dialog / QuickOpen
 proc `<`(a, b: FileEntry): bool = a.name < b.name
@@ -264,8 +270,8 @@ proc update_list(find_def: FindDef) =
   if find_def.list.selected < 0:
     find_def.list.selected = 0
 
-proc jump(editor: Editor, to: int)
-proc jump(editor: Editor, start, stop: int)
+proc jump*(editor: Editor, to: int)
+proc jump*(editor: Editor, start, stop: int)
 
 proc jump_to_selected(find_def: FindDef, editor: Editor) =
   if find_def.list.selected < 0 or
@@ -391,13 +397,13 @@ proc process_key(prompt: var Prompt, key: Key) =
 proc get_inputs(prompt: Prompt): seq[seq[Rune]] =
   prompt.fields.map(field => field.entry.text)
 
-proc show_info(editor: Editor, lines: seq[string]) =
+proc show_info*(editor: Editor, lines: seq[string]) =
   editor.prompt = Prompt(kind: PromptInfo, lines: lines) 
 
-proc show_prompt(editor: Editor,
-                 title: string,
-                 fields: seq[string], 
-                 callback: PromptCallbackProc = nil) =
+proc show_prompt*(editor: Editor,
+                  title: string,
+                  fields: seq[string], 
+                  callback: PromptCallbackProc = nil) =
   editor.prompt = Prompt(
     kind: PromptActive,
     title: title,
@@ -410,10 +416,10 @@ proc show_prompt(editor: Editor,
   )
   editor.completions = @[]
 
-proc hide_prompt(editor: Editor) = 
+proc hide_prompt*(editor: Editor) = 
   editor.prompt = Prompt(kind: PromptNone)
 
-proc primary_cursor(editor: Editor): Cursor = editor.cursors[editor.cursors.len - 1]
+proc primary_cursor*(editor: Editor): Cursor = editor.cursors[editor.cursors.len - 1]
 
 proc merge_cursors(editor: Editor) =
   editor.cursors = editor.cursors.merge_cursors()
@@ -466,13 +472,13 @@ proc update_scroll(editor: Editor, size: Index2d, detach: bool) =
       
   editor.scroll.y = max(editor.scroll.y, 0).min(editor.buffer.lines.len)
 
-proc jump(editor: Editor, to: int) =
+proc jump*(editor: Editor, to: int) =
   editor.jump_stack.add(editor.primary_cursor().get_pos())
   editor.cursors = @[Cursor(kind: CursorInsert, pos: to)]
   editor.completions = @[]
   editor.completion_time = get_time()
 
-proc jump(editor: Editor, start, stop: int) =
+proc jump*(editor: Editor, start, stop: int) =
   editor.jump_stack.add(editor.primary_cursor().get_pos())
   editor.cursors = @[Cursor(kind: CursorSelection, start: start, stop: stop)]
   editor.completions = @[]
@@ -506,14 +512,6 @@ proc find_pattern(editor: Editor, inputs: seq[seq[Rune]]) =
     pos = editor.buffer.text.find(inputs[0])
   if pos != -1:
     editor.jump(pos)
-
-proc replace_pattern(editor: Editor, inputs: seq[seq[Rune]]) =
-  var pos = editor.buffer.text.find(inputs[0], editor.primary_cursor().get_pos + 1)
-  if pos == -1:
-    pos = editor.buffer.text.find(inputs[0])
-  if pos != -1:
-    editor.jump(pos)
-    editor.buffer.replace(pos, pos + inputs[0].len, inputs[1])
 
 proc set_indent_width(editor: Editor, inputs: seq[seq[Rune]]) =
   try:
@@ -756,13 +754,6 @@ proc show_set_indent_width(editor: Editor) =
     "Set Indent Width",
     @["Width: "],
     callback=set_indent_width
-  )
-
-proc show_replace(editor: Editor) =
-  editor.show_prompt(
-    "Find and replace",
-    @["Pattern: ", "Replace: "],
-    callback=replace_pattern
   )
 
 proc show_save_as(editor: Editor) =
@@ -1063,6 +1054,16 @@ method process_key(editor: Editor, key: Key) =
     editor.completion_time = get_time()
   editor.merge_cursors()
 
+proc to_command(tool: Tool, editor: Editor): Command =
+  return Command(
+    name: tool.name,
+    cmd: () => tool.callback(editor)
+  )
+
+proc to_commands(tools: seq[Tool], editor: Editor): seq[Command] =
+  for tool in tools:
+    result.add(to_command(tool, editor))
+
 method list_commands(editor: Editor): seq[Command] =
   return @[
     Command(
@@ -1103,11 +1104,6 @@ method list_commands(editor: Editor): seq[Command] =
       name: "New Buffer",
       shortcut: @[Key(kind: KeyChar, ctrl: true, chr: Rune('n'))],
       cmd: () => editor.new_buffer()
-    ),
-    Command(
-      name: "Find and Replace",
-      shortcut: @[],
-      cmd: () => editor.show_replace()
     ),
     Command(
       name: "Find",
@@ -1158,7 +1154,7 @@ method list_commands(editor: Editor): seq[Command] =
       shortcut: @[Key(kind: KeyChar, ctrl: true, chr: Rune('u'))],
       cmd: () => editor.jump_to_matching_brackets()
     )
-  ]
+  ] & editor_tools.to_commands(editor)
 
 proc compute_line_numbers_width(editor: Editor): int =
   var max_line_number = editor.buffer.lines.len

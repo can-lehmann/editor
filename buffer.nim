@@ -64,16 +64,16 @@ type
     snippets*: Table[seq[Rune], seq[Rune]]
     make_autocompleter*: proc (log: Log): Autocompleter
 
-  ActionKind = enum ActionDelete, ActionInsert
+  ActionKind* = enum ActionDelete, ActionInsert
 
-  Action = object
-    case kind: ActionKind:
+  Action* = object
+    case kind*: ActionKind:
       of ActionDelete:
-        delete_pos: int
-        delete_text: seq[Rune]
+        delete_pos*: int
+        delete_text*: seq[Rune]
       of ActionInsert:
-        insert_pos: int
-        insert_text: seq[Rune]
+        insert_pos*: int
+        insert_text*: seq[Rune]
   
   IndentStyle* = enum IndentSpaces, IndentTab
   NewlineStyle* = enum NewlineLf, NewlineCrLf

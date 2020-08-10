@@ -83,6 +83,11 @@ proc find*(text: seq[Rune], pattern: seq[Rune], start: int = 0): int =
       return it
   return -1
 
+proc find_all*(text: seq[Rune], pattern: seq[Rune]): seq[int] =
+  for it in 0..<(text.len - pattern.len + 1):
+    if text.pattern_at(pattern, it):
+      result.add(it)
+
 proc join*(strs: seq[seq[Rune]], chr: Rune): seq[Rune] =
   result = @[]
   for it, str in strs:
