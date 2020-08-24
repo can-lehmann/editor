@@ -348,15 +348,6 @@ proc exec_waiting(ctx: Context) {.async.} =
     await ctx.exec(ctx.waiting.pop_first())
 
 method poll(ctx: Context) =
-  if has_pending_operations():
-    try:
-      let start = get_time()
-      drain(1)
-      let diff = get_time() - start
-      ctx.log.add_info("comp_nim", "Call to drain took " & $diff)
-    except OSError as err:
-      ctx.log.add_error("comp_nim", err.msg)
-  
   when not defined(windows):
     if ctx.is_restarting and ctx.nimsuggest.running:
       let handle = ctx.nimsuggest.output_handle().int

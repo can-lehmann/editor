@@ -20,7 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import strutils, tables, unicode, sequtils, sugar, hashes, times
+import strutils, tables, unicode, sequtils, sugar
+import hashes, times, algorithm, asyncdispatch
 import utils, ui_utils, termdiff, buffer, log
 
 type
@@ -151,6 +152,8 @@ proc make_command_search(app: App, prev_window: Window): Window =
     entry: make_entry(app.copy_buffer),
     commands: prev_window.list_commands()
   )
+  cmd_search.commands.sort(proc (a, b: Command): int =
+    cmp(a.name.to_lower(), b.name.to_lower()))
   cmd_search.update_list()
   return cmd_search
 
@@ -493,10 +496,19 @@ proc close*(app: App) =
     comp.close()
 
 proc process_key*(app: App, key: Key): bool =
+  if has_pending_operations():
+    try:
+      let start = get_time()
+      drain(1)
+      let diff = get_time() - start
+      app.log.add_info("window_manager", "Call to drain took " & $diff)
+    except OSError as err:
+      app.log.add_error("window_manager", err.msg)
+  
   defer:
     if result:
       app.close()
-
+  
   case app.mode:
     of AppModeNewPane:
       case key.kind:
