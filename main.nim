@@ -23,8 +23,8 @@
 import unicode, tables, os
 import termdiff, window_manager, buffer
 import editor, keyinfo, calc, file_manager, log_viewer  
-import highlight/[lisp, json, html, markdown, cpp, nim]
-import autocomplete/[comp_nim, comp_simple]
+import highlight/[lisp, json, html, markdown, cpp, nim, lua]
+import autocomplete/[comp_nim, comp_simple, comp_lua]
 import tools/[base_tools]
 
 setup_term()
@@ -91,6 +91,13 @@ var
       name: "Text",
       file_exts: @["txt"],
       indent_width: 2
+    ),
+    Language(
+      name: "Lua",
+      file_exts: @["lua"],
+      indent_width: 2,
+      highlighter: new_lua_highlighter,
+      make_autocompleter: new_lua_autocompleter
     )
   ]
   window_constructors = @[
