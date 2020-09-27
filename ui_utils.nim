@@ -205,7 +205,8 @@ proc process_key*(entry: var Entry, key: Key) =
     of KeyDelete:
       case entry.cursor.kind:
         of CursorInsert:
-          entry.text = entry.text.substr(0, entry.cursor.pos - 1) & entry.text.substr(entry.cursor.pos + 1)
+          if entry.cursor.pos < entry.text.len:
+            entry.text = entry.text.substr(0, entry.cursor.pos - 1) & entry.text.substr(entry.cursor.pos + 1)
         of CursorSelection:
           entry.delete_selected()
     of KeyChar:
