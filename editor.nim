@@ -804,15 +804,24 @@ proc only_primary_cursor(editor: Editor) =
   var cur = editor.primary_cursor()
   editor.cursors = @[cur]
 
-proc jump_to_matching_brackets(editor: Editor) =
+proc jump_to_matching_brackets(editor: Editor, select: bool = false) =
   for cursor in editor.cursors.mitems:
     if cursor.kind != CursorInsert:
       continue
     let match_pos = editor.buffer.match_bracket(cursor.pos)
     if match_pos != -1:
-      cursor = Cursor(kind: CursorInsert,
-        pos: match_pos
-      )
+      if select:
+        cursor = Cursor(kind: CursorSelection,
+          start: cursor.pos, stop: match_pos
+        )
+        if cursor.start < cursor.stop:
+          cursor.stop += 1
+        else:
+          cursor.start += 1
+      else:
+        cursor = Cursor(kind: CursorInsert,
+          pos: match_pos
+        )
 
 proc trigger_autocomplete(editor: Editor, chr: Rune) =
   let 
@@ -1024,10 +1033,10 @@ method process_key(editor: Editor, key: Key) =
           of Rune('x'): editor.cut()
           of Rune('b'): editor.jump_back()
           of Rune('d'): editor.select_next()
-          of Rune('o'): editor.only_primary_cursor()
+          of Rune('u'): editor.only_primary_cursor()
           of Rune('z'): editor.buffer.undo()
           of Rune('y'): editor.buffer.redo()
-          of Rune('u'): editor.jump_to_matching_brackets()
+          of Rune('o'): editor.jump_to_matching_brackets(key.shift)
           else: discard
       else:
         editor.insert(key.chr)
@@ -1142,7 +1151,7 @@ method list_commands(editor: Editor): seq[Command] =
     ),
     Command(
       name: "Only Primary Cursor",
-      shortcut: @[Key(kind: KeyChar, ctrl: true, chr: Rune('o'))],
+      shortcut: @[Key(kind: KeyChar, ctrl: true, chr: Rune('u'))],
       cmd: () => editor.only_primary_cursor()
     ),
     Command(
@@ -1151,8 +1160,13 @@ method list_commands(editor: Editor): seq[Command] =
     ),
     Command(
       name: "Jump to Matching Brackets",
-      shortcut: @[Key(kind: KeyChar, ctrl: true, chr: Rune('u'))],
+      shortcut: @[Key(kind: KeyChar, ctrl: true, chr: Rune('o'))],
       cmd: () => editor.jump_to_matching_brackets()
+    ),
+    Command(
+      name: "Select Brackets",
+      shortcut: @[Key(kind: KeyChar, ctrl: true, shift: true, chr: Rune('o'))],
+      cmd: () => editor.jump_to_matching_brackets(true)
     )
   ] & editor_tools.to_commands(editor)
 

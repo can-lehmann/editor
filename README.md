@@ -58,11 +58,13 @@ nim compile -r -o:main-sdl --opt:speed -d:sdl_backend main.nim
 
 - `Ctrl + Z`: Undo
 - `Ctrl + Y`: Redo
+- `Ctrl + O`: Jump to matching bracket
+- `Ctrl + Shift + O`: Select bracket
 
 #### Multiple Cursors
 - `Ctrl + D`: Select next
 - `Shift + Alt + Up/Down`: New cursor
-- `Escape` / `Ctrl + O`: Remove cursors
+- `Escape` / `Ctrl + U`: Remove cursors
 
 ## License
 This project is licensed under the MIT License.
