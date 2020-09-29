@@ -35,6 +35,7 @@ type
     TokenList, TokenLink, TokenCode,
     TokenFormatting,
     TokenTag, TokenTagClose
+    TokenId, TokenClass
 
   Token* = object
     kind*: TokenKind
@@ -102,13 +103,16 @@ proc is_float*(str: seq[Rune], allow_underscore: bool = false): bool =
         return false
   return true
 
+proc contains*(runes: HSlice[char, char], rune: Rune): bool =
+  ord(rune) >= runes.a.ord() and ord(rune) <= runes.b.ord()
+
 proc color*(token: Token): Color =
   case token.kind:
     of TokenString, TokenChar: return Color(base: ColorGreen, bright: true)
     of TokenKeyword: return Color(base: ColorRed, bright: true)
     of TokenComment: return Color(base: ColorBlue, bright: false)
-    of TokenLiteral: return Color(base: ColorYellow, bright: false)
-    of TokenType: return Color(base: ColorCyan, bright: true)
+    of TokenLiteral, TokenId: return Color(base: ColorYellow, bright: false)
+    of TokenType, TokenClass: return Color(base: ColorCyan, bright: true)
     of TokenHeading: return Color(base: ColorRed, bright: true)
     of TokenList: return Color(base: ColorRed, bright: true)
     of TokenLink: return Color(base: ColorCyan, bright: true)

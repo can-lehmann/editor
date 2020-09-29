@@ -22,8 +22,8 @@
 
 import unicode, tables, os
 import termdiff, window_manager, buffer
-import editor, keyinfo, calc, file_manager, log_viewer  
-import highlight/[lisp, json, html, markdown, cpp, nim, lua]
+import editor, keyinfo, calc, file_manager, log_viewer
+import highlight/[lisp, json, html, markdown, cpp, nim, lua, css]
 import autocomplete/[comp_nim, comp_simple, comp_lua]
 import tools/[base_tools]
 
@@ -55,7 +55,8 @@ var
     Language(
       name: "CSS",
       file_exts: @["css"],
-      indent_width: 2
+      indent_width: 2,
+      highlighter: new_css_highlighter
     ),
     Language(
       name: "Lisp/Scheme",

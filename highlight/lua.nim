@@ -45,7 +45,7 @@ proc token_kind(name: seq[Rune]): TokenKind =
 method next*(state: State, text: seq[Rune]): Token =
   var start = text.skip_whitespace(state.it)
   if start >= text.len:
-    return Token(kind: TokenNone)  
+    return Token(kind: TokenNone)
 
   if text.pattern_at("--", start):
     var it = start + 2
