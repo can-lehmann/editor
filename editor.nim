@@ -1003,8 +1003,7 @@ method process_key(editor: Editor, key: Key) =
               for cursor in editor.cursors:
                 if cursor.kind != CursorInsert:
                   continue
-                editor.buffer.delete(cursor.pos - query.len, cursor.pos)
-                editor.buffer.insert(cursor.pos - query.len, text)
+                editor.buffer.replace(cursor.pos - query.len, cursor.pos, text)
             else:
               for cursor in editor.cursors:
                 case cursor.kind:
