@@ -25,7 +25,7 @@ import termdiff, window_manager, buffer
 import editor, keyinfo, calc, file_manager, log_viewer
 import highlight/[lisp, json, html, markdown, cpp, nim, lua, css]
 import autocomplete/[comp_nim, comp_simple, comp_lua]
-import tools/[base_tools]
+import tools/[base_tools, json_tools]
 
 setup_term()
 system.add_quit_proc(quit_app)

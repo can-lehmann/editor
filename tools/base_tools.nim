@@ -23,7 +23,7 @@
 import unicode, base64, sugar
 import ".." / [editor, buffer, utils, ui_utils, window_manager]
 
-proc wrap_replace_selection(callback: proc (x: string): string): (proc (editor: Editor)) =
+proc wrap_replace_selection*(callback: proc (x: string): string): (proc (editor: Editor)) =
   return proc (editor: Editor) =
     template apply_callback(start, stop) =
       try:
