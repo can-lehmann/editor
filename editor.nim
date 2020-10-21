@@ -924,7 +924,7 @@ method process_key(editor: Editor, key: Key) =
           continue
         let
           indent_level = editor.buffer.indentation(cursor.pos)
-          indent = sequtils.repeat(Rune(' '), indent_level)
+          indent = editor.buffer.make_indent(indent_level)
         editor.buffer.insert(cursor.pos, editor.buffer.newline_style.to_runes() & indent)
     of KeyPageDown:
       for it, cursor in editor.cursors:

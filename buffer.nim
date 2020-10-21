@@ -314,6 +314,14 @@ proc save*(buffer: Buffer) =
   write_file(buffer.file_path, $buffer.text)
   buffer.changed = false
 
+proc indent_char*(buffer: Buffer): Rune =
+  case buffer.indent_style:
+    of IndentTab: return Rune('\t')
+    of IndentSpaces: return Rune(' ')
+
+proc make_indent*(buffer: Buffer, level: int): seq[Rune] =
+  return sequtils.repeat(buffer.indent_char, level)
+
 proc indentation*(buffer: Buffer, pos: int): int =
   var it = pos - 1
   while it >= 0 and buffer.text[it] != '\n':
@@ -321,7 +329,7 @@ proc indentation*(buffer: Buffer, pos: int): int =
   result = 0
   it += 1
   while it < buffer.text.len and
-        buffer.text[it] == ' ' and
+        buffer.text[it] == buffer.indent_char and
         it < pos:
     result += 1
     it += 1
