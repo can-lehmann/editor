@@ -171,7 +171,7 @@ proc process_key(quick_open: QuickOpen, editor: Editor, key: Key) =
   case key.kind:
     of KeyReturn:
       quick_open.open_selected(editor)
-    of KeyArrowDown, KeyArrowUp:
+    of LIST_KEYS:
       quick_open.list.process_key(key)
     else:
       quick_open.entry.process_key(key)
@@ -264,9 +264,10 @@ proc update_list(find_def: FindDef) =
   find_def.list.items = find_def.shown_defs.map(def =>
     to_runes(strutils.align_left($def.kind, kind_width + 1)) & def.name)
   
+  if not find_def.list.detached:
+    find_def.list.view = 0
   if find_def.list.selected >= find_def.list.items.len:
     find_def.list.selected = find_def.list.items.len - 1
-  
   if find_def.list.selected < 0:
     find_def.list.selected = 0
 
@@ -306,7 +307,7 @@ proc process_mouse(find_def: FindDef, editor: Editor, mouse: Mouse): bool =
 
 proc process_key(find_def: FindDef, editor: Editor, key: Key) =
   case key.kind:
-    of KeyArrowUp, KeyArrowDown:
+    of LIST_KEYS:
       find_def.list.process_key(key)
     of KeyReturn:
       find_def.jump_to_selected(editor)

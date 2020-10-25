@@ -85,7 +85,7 @@ proc open_selected(launcher: Launcher) =
 
 method process_key(launcher: Launcher, key: Key) =
   case key.kind:
-    of KeyArrowDown, KeyArrowUp:
+    of LIST_KEYS:
       launcher.list.process_key(key)
     of KeyReturn:
       launcher.open_selected()
@@ -188,7 +188,7 @@ method process_key(cmd_search: CommandSearch, key: Key) =
   case key.kind:
     of KeyReturn:
       cmd_search.run_command()
-    of KeyArrowUp, KeyArrowDown:
+    of LIST_KEYS:
       cmd_search.list.process_key(key)
     else:
       cmd_search.entry.process_key(key)

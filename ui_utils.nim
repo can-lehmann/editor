@@ -292,7 +292,8 @@ type
     items*: seq[seq[Rune]]
     selected*: int
     view*: int
-    detached: bool
+    height: int
+    detached*: bool
 
 proc make_list*(items: seq[seq[Rune]]): List =
   List(items: items, view: 0, selected: 0)
@@ -317,22 +318,38 @@ proc process_mouse*(list: var List, mouse: Mouse): bool =
           return true
     else: discard
 
+const LIST_KEYS* = {
+  KeyArrowUp, KeyArrowDown,
+  KeyHome, KeyEnd,
+  KeyPageDown, KeyPageUp
+}
+
 proc process_key*(list: var List, key: Key) =
   list.detached = false
   case key.kind:
     of KeyArrowUp:
       list.selected -= 1
-      if list.selected < 0:
-        list.selected = 0
     of KeyArrowDown:
       list.selected += 1
-      if list.selected >= list.items.len:
-        list.selected = list.items.len - 1
+    of KeyHome:
+      list.selected = 0
+    of KeyEnd:
+      list.selected = list.items.len - 1
+    of KeyPageDown:
+      list.selected += list.height
+    of KeyPageUp:
+      list.selected -= list.height
     else: discard
+  
+  if list.selected >= list.items.len:
+    list.selected = list.items.len - 1
+  if list.selected < 0:
+    list.selected = 0
 
-proc scroll(list: var List, height: int) =
+
+proc scroll(list: var List) =
   if not list.detached:
-    while list.selected - list.view >= height - 3:
+    while list.selected - list.view >= list.height - 3:
       list.view += 1
     
     while list.selected - list.view < 3:
@@ -347,7 +364,8 @@ proc render*(list: var List, box: Box, ren: var TermRenderer) =
   let prev_clip = ren.clip_area
   ren.clip(box)
   
-  list.scroll(box.size.y)
+  list.height = box.size.y
+  list.scroll()
   for it, item in list.items:
     ren.move_to(box.min.x, box.min.y + it - list.view)
     ren.put(item, reverse=it == list.selected)
