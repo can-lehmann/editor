@@ -6,6 +6,6 @@ todo.md
 main.js
 test.*
 test-*.txt
-assets/font.ttf
+assets/
 build/
 .temp*
