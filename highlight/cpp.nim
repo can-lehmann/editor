@@ -76,7 +76,7 @@ method next(state: State, text: seq[Rune]): Token =
       case chr:
         of '\n':
           let state = State(it: start + 1)
-          return Token(kind: TokenUnknown, start: start, stop: start + 1, state: state)
+          return Token(kind: TokenUnknown, start: start, stop: start + 1, state: state, can_stop: true)
         of '\"':
           let
             it = text.skip_string_like(start + 1, end_char='\"')
@@ -111,12 +111,15 @@ method next(state: State, text: seq[Rune]): Token =
     of ModeNone:
       let start = text.skip_whitespace(state.it)
       if start >= text.len:
-        return Token(kind: TokenNone)  
+        return Token(kind: TokenNone)
       let chr = text[start]
       template skip_chr() =
         let state = State(it: start + 1)
         return Token(kind: TokenUnknown, start: start, stop: start + 1, state: state)
       case chr:
+        of '\n':
+          let state = State(it: start + 1)
+          return Token(kind: TokenUnknown, start: start, stop: start + 1, state: state, can_stop: true)
         of '\"', '\'':
           let
             it = text.skip_string_like(start + 1, end_char=chr)

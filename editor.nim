@@ -1488,7 +1488,7 @@ method render(editor: Editor, box: Box, ren: var TermRenderer) =
 
 method close*(editor: Editor) =
   editor.buffer.unregister_hook(editor.cursor_hook_id)  
-  
+
 proc make_editor*(app: App, buffer: Buffer): Editor =
   result = Editor(
     buffer: buffer,

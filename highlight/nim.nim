@@ -26,7 +26,6 @@ import highlight, ../utils
 type
   State = ref object of HighlightState
     it: int
-    is_float: bool
 
 const
   NIM_KEYWORDS = [
@@ -53,7 +52,8 @@ const
     "bool", "char", "auto", "pointer",
     "cint", "cshort", "cstring", "clong",
     "cuint", "culong", "cushort",
-    "openArray", "Table", "Deque", "HashSet", "range"
+    "openArray", "Table", "Deque", "HashSet", "range",
+    "untyped", "typed", "varargs"
   ]
 
 
@@ -64,7 +64,9 @@ proc token_kind(str: seq[Rune]): TokenKind =
     return TokenKeyword
   elif $str in NIM_TYPES:
     return TokenType
-  elif str.is_int(allow_underscore=true) or str.is_float(allow_underscore=true):
+  elif str.is_int(allow_underscore=true) or
+       str.is_float(allow_underscore=true) or
+       ('\'' in str and str.split('\'')[0].is_float(true)):
     return TokenLiteral
   
   return TokenName
@@ -80,11 +82,16 @@ method next*(state: State, text: seq[Rune]): Token =
         it = text.skip_string_like(start + 1)
         state = State(it: it + 1)
       return Token(kind: TokenString, start: start, stop: it + 1, state: state)
-    of '\'':  
+    of '\'':
       let
         it = text.skip_string_like(start + 1, end_char='\'')
         state = State(it: it + 1)
       return Token(kind: TokenChar, start: start, stop: it + 1, state: state)
+    of '`':
+      let
+        it = text.skip_string_like(start + 1, end_char='`')
+        state = State(it: it + 1)
+      return Token(kind: TokenName, start: start, stop: it + 1, state: state)
     of '#':
       if start + 1 < text.len and text[start + 1] == '[':
         var
@@ -106,37 +113,39 @@ method next*(state: State, text: seq[Rune]): Token =
           it += 1
         let state = State(it: it + 1)
         return Token(kind: TokenComment, start: start, stop: it, state: state)
-    of ':', '<', '>', '[', ']', '(', ')', '{', '}', ',', ';', '=', '`':
+    of ':', '.', '[', ']', '(', ')', '{', '}', ',', ';':
       let state = State(it: start + 1)
       return Token(kind: TokenUnknown, start: start, stop: start + 1, state: state)
-    of '.':
-      var
-        kind = TokenUnknown
-        offset = 1
-      if state.is_float and
-         start + 1 < text.len and
-         is_digit(text[start + 1]):
-        kind = TokenLiteral
-        offset = 2
+    of '\n':
       let state = State(it: start + 1)
-      return Token(kind: kind, start: start, stop: start + offset, state: state)
+      return Token(kind: TokenUnknown, start: start, stop: start + 1, state: state, can_stop: true)
     else:
+      type NameKind = enum NameNone, NameOperator, NameText
+      
       var
         name: seq[Rune] = @[]
+        kind = NameNone
         it = start
       while it < text.len:
         let chr = text[it]
         case chr:
-          of ' ', '\t', '\n', '\r', ':', '<', '>',
+          of ' ', '\t', '\n', '\r', ':',
              '[', ']', '(', ')', '{', '}', ',', ';',
-             '=', '`', '\"', '#', '\'', '.':
-            break
+             '`', '\"', '#', '\'', '.':
+            if not (name.is_float(true) and chr == '\''):
+              break
+          of '+', '-', '*', '/', '=', '<', '>', '!', '$', '%', '&', '|', '?':
+            if kind == NameText:
+              break
+            kind = NameOperator
           else:
-            name.add(chr)
+            if kind == NameOperator and
+               not (name.is_int(true) and chr == '.'):
+              break
+            kind = NameText
+        name.add(chr)
         it += 1
-      let
-        kind = name.token_kind()
-        state = State(it: it, is_float: name.is_float(allow_underscore=true))
-      return Token(kind: kind, start: start, stop: it, state: state)
+      let state = State(it: it)
+      return Token(kind: name.token_kind(), start: start, stop: it, state: state)
 
 proc new_nim_highlighter*(): HighlightState = State()

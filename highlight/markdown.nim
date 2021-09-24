@@ -38,10 +38,8 @@ proc token_kind(state: State): TokenKind =
     return TokenItalic
   return TokenUnknown
 
-method requires_stop_token(state: State): bool = true
-
 method next(state: State, text: seq[Rune]): Token =
-  let start = text.skip(state.it, {' ', '\r', '\t'})
+  let start = text.skip_whitespace(state.it)
   if start >= text.len:
     return Token(kind: TokenNone)  
   let chr = text[start]

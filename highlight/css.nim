@@ -71,7 +71,7 @@ method next(state: State, text: seq[Rune]): Token =
   
   template char_token(new_state) =
     return Token(kind: TokenUnknown,
-      start: start, stop: start + 1, state: new_state
+      start: start, stop: start + 1, state: new_state, can_stop: true
     )
   
   template skip_token() =

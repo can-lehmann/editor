@@ -45,13 +45,12 @@ type
     can_stop*: bool
 
 method next*(state: HighlightState, text: seq[Rune]): Token {.base.} = quit "Abstract"
-method requires_stop_token*(state: HighlightState): bool {.base.} = false
 
 proc is_inside*(token: Token, index: int): bool =
   index >= token.start and index < token.stop
 
 proc is_whitespace*(rune: Rune): bool =
-  rune == ' ' or rune == '\t' or rune == '\r' or rune == '\n'
+  rune == ' ' or rune == '\t' or rune == '\r'
 
 proc skip_whitespace*(text: seq[Rune], pos: int): int =
   result = pos

@@ -45,9 +45,9 @@ method next(state: State, text: seq[Rune]): Token =
         stop = text.skip_string_like(start + 1, end_char = chr)
         state = State(it: stop + 1)
       return Token(kind: TokenString, start: start, stop: stop + 1, state: state)
-    of ':', ',', '[', ']', '{', '}':
+    of ':', ',', '[', ']', '{', '}', '\n':
       let state = State(it: start + 1)
-      return Token(kind: TokenUnknown, start: start, stop: start + 1, state: state)
+      return Token(kind: TokenUnknown, start: start, stop: start + 1, state: state, can_stop: true)
     else:
       var
         name: seq[Rune] = @[]

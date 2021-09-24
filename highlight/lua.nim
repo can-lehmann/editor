@@ -74,7 +74,7 @@ method next*(state: State, text: seq[Rune]): Token =
             name.add(chr)
             it += 1
       if name.len == 0:
-        return Token(kind: TokenUnknown, start: start, stop: it + 1, state: State(it: it + 1))
+        return Token(kind: TokenUnknown, start: start, stop: it + 1, state: State(it: it + 1), can_stop: true)
       return Token(kind: name.token_kind, start: start, stop: it, state: State(it: it + 1))
 
 proc new_lua_highlighter*(): HighlightState = State()

@@ -34,6 +34,9 @@ method next*(state: State, text: seq[Rune]): Token =
     return Token(kind: TokenNone)  
   let chr = text[start]
   case chr:
+    of '\n':
+      let state = State(it: start + 1, is_tag: state.is_tag, is_close: state.is_close)
+      return Token(kind: TokenUnknown, start: start, stop: start + 1, state: state, can_stop: true)
     of '\"':
       let
         it = text.skip_string_like(start + 1)

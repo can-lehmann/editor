@@ -57,15 +57,18 @@ proc token_kind(name: seq[Rune], is_call: bool, is_quote: bool): TokenKind =
 method next*(state: State, text: seq[Rune]): Token =
   var start = text.skip_whitespace(state.it)
   if start >= text.len:
-    return Token(kind: TokenNone)  
+    return Token(kind: TokenNone)
   let chr = text[start]
   case chr:
+    of '\n':
+      let new_state = State(it: start + 1, depth: state.depth, quote_depths: state.quote_depths)
+      return Token(kind: TokenUnknown, start: start, stop: start + 1, state: new_state, can_stop: true)
     of ';':
       var it = start + 1
       while it < text.len and text[it] != '\n':
         it += 1
       let new_state = State(it: it + 1, depth: state.depth, quote_depths: state.quote_depths)
-      return Token(kind: TokenComment, start: start, stop: it + 1, state: new_state)
+      return Token(kind: TokenComment, start: start, stop: it + 1, state: new_state, can_stop: true)
     of '\"':
       let
         it = text.skip_string_like(start + 1)
