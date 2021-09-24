@@ -30,42 +30,42 @@ nim compile -r -o:main-sdl --opt:speed -d:sdl_backend main.nim
 
 ## Keyboard Bindings
 ### Window Management
-- `Ctrl + P N Left/Right/Up/Down`: Create new window
-- `Ctrl + P A`: Select Application
-- `Ctrl + Left/Right/Up/Down` / `Alt + Left/Right/Up/Down`: Change active window
-- `Ctrl + W`: Close active window
-- `Ctrl + Q`: Quit
+- <kbd>Ctrl</kbd><kbd>P N Left/Right/Up/Down</kbd>: Create new window
+- <kbd>Ctrl</kbd><kbd>P A</kbd>: Select Application
+- <kbd>Ctrl</kbd><kbd>Left/Right/Up/Down<kbd> / <kbd>Alt</kbd><kbd>Left/Right/Up/Down</kbd>: Change active window
+- <kbd>Ctrl</kbd><kbd>W</kbd>: Close active window
+- <kbd>Ctrl</kbd><kbd>Q</kbd>: Quit
 
-- `F1`: Search command
+- <kbd>F1</kbd>: Search command
 
 ### Editor
-- `Ctrl + N`: New
-- `Ctrl + T`: Quick Open
-- `Ctrl + S`: Save
+- <kbd>Ctrl</kbd><kbd>N</kbd>: New
+- <kbd>Ctrl</kbd><kbd>T</kbd>: Quick Open
+- <kbd>Ctrl</kbd><kbd>S</kbd>: Save
 
-- `Ctrl + R`: Find definition
-- `Ctrl + F`: Find
-- `Ctrl + G`: Go to line
-- `Ctrl + E`: Close active prompt
+- <kbd>Ctrl</kbd><kbd>R</kbd>: Find definition
+- <kbd>Ctrl</kbd><kbd>F</kbd>: Find
+- <kbd>Ctrl</kbd><kbd>G</kbd>: Go to line
+- <kbd>Ctrl</kbd><kbd>E</kbd>: Close active prompt
 
-- `Ctrl + C`: Copy
-- `Ctrl + X`: Cut
-- `Ctrl + V`: Paste
+- <kbd>Ctrl</kbd><kbd>C</kbd>: Copy
+- <kbd>Ctrl</kbd><kbd>X</kbd>: Cut
+- <kbd>Ctrl</kbd><kbd>V</kbd>: Paste
 
-- `F2`: Show autocomplete
-- `Tab`: Autocomplete word / Indent
-- `Shift + Tab`: Unindent
+- <kbd>F2</kbd>: Show autocomplete
+- <kbd>Tab</kbd>: Autocomplete word / Indent
+- <kbd>Shift</kbd><kbd>Tab</kbd>: Unindent
 
-- `Ctrl + Z`: Undo
-- `Ctrl + Y`: Redo
-- `Ctrl + O`: Jump to matching bracket
-- `Ctrl + Shift + O`: Select bracket
+- <kbd>Ctrl</kbd><kbd>Z</kbd>: Undo
+- <kbd>Ctrl</kbd><kbd>Y</kbd>: Redo
+- <kbd>Ctrl</kbd><kbd>O</kbd>: Jump to matching bracket
+- <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>O</kbd>: Select bracket
 
 #### Multiple Cursors
-- `Ctrl + D`: Select next
-- `Shift + Alt + Up/Down`: New cursor
-- `Escape`: Remove cursors
-- `Ctrl + U`: Remove last cursor
+- <kbd>Ctrl</kbd><kbd>D</kbd>: Select next
+- <kbd>Shift</kbd><kbd>Alt</kbd><kbd>Up/Down</kbd>: New cursor
+- <kbd>Escape</kbd>: Remove cursors
+- <kbd>Ctrl</kbd><kbd>U</kbd>: Remove last cursor
 
 ## License
 This project is licensed under the MIT License.
