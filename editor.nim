@@ -409,7 +409,7 @@ proc show_prompt*(editor: Editor,
 proc hide_prompt*(editor: Editor) = 
   editor.prompt = Prompt(kind: PromptNone)
 
-proc primary_cursor*(editor: Editor): Cursor = editor.cursors[editor.cursors.len - 1]
+proc primary_cursor*(editor: Editor): Cursor = editor.cursors[^1]
 
 proc merge_cursors(editor: Editor) =
   editor.cursors = editor.cursors.merge_cursors()
@@ -794,6 +794,10 @@ proc only_primary_cursor(editor: Editor) =
   var cur = editor.primary_cursor()
   editor.cursors = @[cur]
 
+proc pop_cursor(editor: Editor) =
+  if editor.cursors.len > 1:
+    discard editor.cursors.pop()
+
 proc jump_to_matching_brackets(editor: Editor, select: bool = false) =
   for cursor in editor.cursors.mitems:
     if cursor.kind != CursorInsert:
@@ -1022,7 +1026,7 @@ method process_key(editor: Editor, key: Key) =
           of Rune('x'): editor.cut()
           of Rune('b'): editor.jump_back()
           of Rune('d'): editor.select_next()
-          of Rune('u'): editor.only_primary_cursor()
+          of Rune('u'): editor.pop_cursor()
           of Rune('z'): editor.buffer.undo()
           of Rune('y'): editor.buffer.redo()
           of Rune('o'): editor.jump_to_matching_brackets(key.shift)
@@ -1139,8 +1143,12 @@ method list_commands(editor: Editor): seq[Command] =
       cmd: () => editor.select_next()
     ),
     Command(
-      name: "Only Primary Cursor",
+      name: "Remove Last Cursor",
       shortcut: @[Key(kind: KeyChar, ctrl: true, chr: Rune('u'))],
+      cmd: () => editor.pop_cursor()
+    ),
+    Command(
+      name: "Only Primary Cursor",
       cmd: () => editor.only_primary_cursor()
     ),
     Command(

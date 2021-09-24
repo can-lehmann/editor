@@ -64,7 +64,8 @@ nim compile -r -o:main-sdl --opt:speed -d:sdl_backend main.nim
 #### Multiple Cursors
 - `Ctrl + D`: Select next
 - `Shift + Alt + Up/Down`: New cursor
-- `Escape` / `Ctrl + U`: Remove cursors
+- `Escape`: Remove cursors
+- `Ctrl + U`: Remove last cursor
 
 ## License
 This project is licensed under the MIT License.
