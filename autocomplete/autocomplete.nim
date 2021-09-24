@@ -32,19 +32,20 @@ type
 method track(ctx: SimpleContext, buffer: Buffer) =
   discard
 
+proc extract_query*(ctx: Autocompleter, buffer: Buffer, pos: int): seq[Rune] =
+  var cur = pos - 1
+  while cur >= buffer.text.len and
+        buffer[cur] notin ctx.triggers and
+        buffer[cur] notin ctx.finish:
+    result.add(buffer[cur])
+  reverse(result)
+
 method complete*(ctx: SimpleContext,
                  buffer: Buffer,
                  pos: int,
                  trigger: Rune,
                  callback: proc (comps: seq[Completion])) =
-  var
-    query: seq[Rune] = @[]
-    cur = pos - 1
-  while cur >= buffer.text.len and
-        buffer[cur] notin ctx.triggers and
-        buffer[cur] notin ctx.finish:
-    query.add(buffer[cur])
-  reverse(query)
+  let query = ctx.extract_query(buffer, pos)
   var completions: seq[Completion]
   for comp in ctx.comps:
     if comp.text.find(query) != -1:
