@@ -30,9 +30,10 @@ nim compile -r -o:main-sdl --opt:speed -d:sdl_backend main.nim
 
 ## Keyboard Bindings
 ### Window Management
-- <kbd>Ctrl</kbd><kbd>P N Left/Right/Up/Down</kbd>: Create new window
-- <kbd>Ctrl</kbd><kbd>P A</kbd>: Select Application
-- <kbd>Ctrl</kbd><kbd>Left/Right/Up/Down<kbd> / <kbd>Alt</kbd><kbd>Left/Right/Up/Down</kbd>: Change active window
+- <kbd>Ctrl</kbd><kbd>P</kbd>+<kbd>N</kbd>+<kbd>Left</kbd>/<kbd>Right</kbd>/<kbd>Up</kbd>/<kbd>Down</kbd>: Create new window
+- <kbd>Ctrl</kbd><kbd>P</kbd>+<kbd>A</kbd>: Select Application
+- <kbd>Ctrl</kbd><kbd>P</kbd>+<kbd>Left</kbd>/<kbd>Right</kbd>/<kbd>Up</kbd>/<kbd>Down</kbd>: Change active window
+- <kbd>Alt</kbd><kbd>Left</kbd>/<kbd>Right</kbd>/<kbd>Up</kbd>/<kbd>Down</kbd>: Change active window
 - <kbd>Ctrl</kbd><kbd>W</kbd>: Close active window
 - <kbd>Ctrl</kbd><kbd>Q</kbd>: Quit
 
@@ -63,7 +64,7 @@ nim compile -r -o:main-sdl --opt:speed -d:sdl_backend main.nim
 
 #### Multiple Cursors
 - <kbd>Ctrl</kbd><kbd>D</kbd>: Select next
-- <kbd>Shift</kbd><kbd>Alt</kbd><kbd>Up/Down</kbd>: New cursor
+- <kbd>Shift</kbd><kbd>Alt</kbd><kbd>Up</kbd>/<kbd>Down</kbd>: New cursor
 - <kbd>Escape</kbd>: Remove cursors
 - <kbd>Ctrl</kbd><kbd>U</kbd>: Remove last cursor
 
