@@ -76,5 +76,5 @@ method list_commands(key_info: KeyInfo): seq[Command] =
     )
   ]
 
-proc make_key_info*(app: App): Window =
+proc new_key_info*(app: App): Window =
   return KeyInfo(app: app, events: @[])

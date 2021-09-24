@@ -120,7 +120,7 @@ method process_mouse(file_manager: FileManager, mouse: Mouse): bool =
       case item.kind:
         of ItemDir: file_manager.open(item.path)
         of ItemFile:
-          let editor = file_manager.app.make_editor(item.path)
+          let editor = file_manager.app.new_editor(item.path)
           file_manager.app.root_pane.open_window(editor)
         else: discard
 
@@ -142,7 +142,7 @@ method process_key(file_manager: FileManager, key: Key) =
           file_manager.mode = Mode(kind: ModeNone)
           file_manager.open(item.path)
         of ItemFile:
-          file_manager.app.root_pane.open_window(file_manager.app.make_editor(item.path))
+          file_manager.app.root_pane.open_window(file_manager.app.new_editor(item.path))
         else: discard
     of KeyArrowUp, KeyArrowDown:
       file_manager.list.process_key(key)
@@ -209,7 +209,7 @@ method render(file_manager: FileManager, box: Box, ren: var TermRenderer) =
       ren.move_to(box.min + Index2d(x: sidebar_text.len + 1, y: 1))
       file_manager.mode.search_entry.render(ren)
 
-proc make_file_manager*(app: App): Window =
+proc new_file_manager*(app: App): Window =
   let file_manager = FileManager(app: app)
   file_manager.open(get_current_dir())
   return file_manager

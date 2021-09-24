@@ -296,10 +296,10 @@ type
     selected: int
     scroll: Index2d
 
-proc make_input(app: App): Input =
+proc init_input(app: App): Input =
   return Input(entry: make_entry(app.copy_buffer), output: nil)
 
-proc make_input(calc: Calc): Input = calc.app.make_input()
+proc init_input(calc: Calc): Input = calc.app.init_input()
 
 proc max_input_number_width(calc: Calc): int =
   ($calc.inputs.len).len + 2
@@ -320,7 +320,7 @@ method process_mouse*(calc: Calc, mouse: Mouse): bool =
 method process_key*(calc: Calc, key: Key) =
   case key.kind:
     of KeyReturn:
-      calc.inputs.insert(calc.make_input(), calc.selected + 1)
+      calc.inputs.insert(calc.init_input(), calc.selected + 1)
       calc.selected += 1
     of KeyArrowDown:
       calc.selected += 1
@@ -373,5 +373,5 @@ method render*(calc: Calc, box: Box, ren: var TermRenderer) =
       ren.move_to(box.min.x + calc.max_input_number_width + 1, box.min.y + it * 3 + 2)
       ren.put($input.output)
     
-proc make_calc*(app: App): Window =
-  return Calc(app: app, inputs: @[app.make_input()])
+proc new_calc*(app: App): Window =
+  return Calc(app: app, inputs: @[app.init_input()])

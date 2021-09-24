@@ -102,24 +102,24 @@ var
     )
   ]
   window_constructors = @[
-    make_window_constructor("Editor", make_editor),
-    make_window_constructor("File Manager", make_file_manager),
-    make_window_constructor("Calc", make_calc),
-    make_window_constructor("Keyinfo", make_keyinfo),
-    make_window_constructor("Log Viewer", make_log_viewer)
+    init_window_constructor("Editor", new_editor),
+    init_window_constructor("File Manager", new_file_manager),
+    init_window_constructor("Calc", new_calc),
+    init_window_constructor("Keyinfo", new_keyinfo),
+    init_window_constructor("Log Viewer", new_log_viewer)
   ]
 
 var
   app = make_app(languages, window_constructors)
-  root_pane = Pane(kind: PaneWindow, window: app.make_editor())
+  root_pane = Pane(kind: PaneWindow, window: app.new_editor())
 
 if param_count() > 0:
   root_pane = Pane(kind: PaneWindow,
-    window: app.make_editor(param_str(1).absolute_path(get_current_dir()))
+    window: app.new_editor(param_str(1).absolute_path(get_current_dir()))
   )
   for it in 2..param_count():
     var pane = Pane(kind: PaneWindow,
-      window: app.make_editor(param_str(it).absolute_path(get_current_dir()))
+      window: app.new_editor(param_str(it).absolute_path(get_current_dir()))
     )
     root_pane = Pane(kind: PaneSplitH, factor: (it - 1) / it, pane_a: root_pane, pane_b: pane)
 

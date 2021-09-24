@@ -72,7 +72,7 @@ method close*(window: Window) {.base.} = discard
 method list_commands*(window: Window): seq[Command] {.base.} = discard
 
 # Launcher
-proc make_launcher(app: App): Window =
+proc new_launcher(app: App): Window =
   return Launcher(app: app, list: make_list(app.window_constructors.map(c => c.name)))
 
 proc open_window*(pane: Pane, window: Window)
@@ -113,7 +113,7 @@ method render(launcher: Launcher, box: Box, ren: var TermRenderer) =
 proc make_window*(app: App): Window =
   return app.window_constructors[0].make(app)
 
-proc make_window_constructor*(name: string, make: proc (app: App): Window): WindowConstructor =
+proc init_window_constructor*(name: string, make: proc (app: App): Window): WindowConstructor =
   WindowConstructor(name: name, make: make)
 
 # Command Search
@@ -144,7 +144,7 @@ proc update_list(cmd_search: CommandSearch) =
   if cmd_search.list.selected < 0:
     cmd_search.list.selected = 0
 
-proc make_command_search(app: App, prev_window: Window): Window =
+proc new_command_search(app: App, prev_window: Window): Window =
   let cmd_search = CommandSearch(
     app: app,
     prev_window: prev_window,
@@ -436,10 +436,10 @@ proc render*(pane: Pane, ren: var TermRenderer) =
 
 # App
 proc open_launcher(app: App) =
-  app.root_pane.open_window(app.make_launcher())
+  app.root_pane.open_window(app.new_launcher())
 
 proc open_command_search(app: App) =
-  app.root_pane.open_window(app.make_command_search(app.root_pane.active_window()))
+  app.root_pane.open_window(app.new_command_search(app.root_pane.active_window()))
 
 proc make_app*(languages: seq[Language], window_constructors: seq[WindowConstructor]): owned App =
   for it, lang in languages.pairs:
@@ -465,10 +465,10 @@ proc get_autocompleter*(app: App, language: Language): Autocompleter =
     app.autocompleters[language.id] = autocompleter
   return app.autocompleters[language.id]
 
-proc make_buffer*(app: App, path: string): Buffer =
+proc new_buffer*(app: App, path: string): Buffer =
   if app.buffers.has_key(path):
     return app.buffers[path]
-  result = make_buffer(path, app.languages)
+  result = new_buffer(path, app.languages)
   app.buffers[path] = result
   
   let comp = app.get_autocompleter(result.language)

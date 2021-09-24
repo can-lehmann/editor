@@ -588,7 +588,7 @@ proc insert(editor: Editor, str: seq[Rune]) =
         
 proc load_file(editor: Editor, path: string) =
   editor.buffer.unregister_hook(editor.cursor_hook_id)
-  editor.buffer = editor.app.make_buffer(path)
+  editor.buffer = editor.app.new_buffer(path)
   editor.cursor_hook_id = editor.buffer.register_hook(editor.make_cursor_hook())
   editor.hide_prompt()
   editor.cursors = @[Cursor(kind: CursorInsert, pos: 0)]
@@ -596,7 +596,7 @@ proc load_file(editor: Editor, path: string) =
 
 proc new_buffer(editor: Editor) =
   editor.buffer.unregister_hook(editor.cursor_hook_id)
-  editor.buffer = make_buffer()
+  editor.buffer = new_buffer()
   editor.cursor_hook_id = editor.buffer.register_hook(editor.make_cursor_hook())
   editor.hide_prompt()
   editor.cursors = @[Cursor(kind: CursorInsert, pos: 0)]
@@ -1489,7 +1489,7 @@ method render(editor: Editor, box: Box, ren: var TermRenderer) =
 method close*(editor: Editor) =
   editor.buffer.unregister_hook(editor.cursor_hook_id)  
 
-proc make_editor*(app: App, buffer: Buffer): Editor =
+proc new_editor*(app: App, buffer: Buffer): Editor =
   result = Editor(
     buffer: buffer,
     scroll: Index2d(x: 0, y: 0),
@@ -1499,8 +1499,8 @@ proc make_editor*(app: App, buffer: Buffer): Editor =
   result.cursor_hook_id = result.buffer.register_hook(result.make_cursor_hook())
   result.autocompleter = app.get_autocompleter(result.buffer.language)
 
-proc make_editor*(app: App): Window =
-  make_editor(app, make_buffer())
+proc new_editor*(app: App): Window =
+  new_editor(app, new_buffer())
 
-proc make_editor*(app: App, path: string): Window =
-  make_editor(app, app.make_buffer(path))
+proc new_editor*(app: App, path: string): Window =
+  new_editor(app, app.new_buffer(path))

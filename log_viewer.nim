@@ -130,5 +130,5 @@ method render(viewer: Viewer, box: Box, ren: var TermRenderer) =
     y += 1
     it += 1
 
-proc make_log_viewer*(app: App): Window =
+proc new_log_viewer*(app: App): Window =
   Viewer(app: app, attach_end: true)

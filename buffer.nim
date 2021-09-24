@@ -638,7 +638,7 @@ proc guess_newline_style(text: seq[Rune]): NewlineStyle =
       result = style
       max_score = score
 
-proc make_buffer*(): Buffer =
+proc new_buffer*(): Buffer =
   return Buffer(
     file_path: "",
     text: @[],
@@ -653,7 +653,7 @@ proc make_buffer*(): Buffer =
     newline_style: NewlineLf
   )
 
-proc make_buffer*(path: string, lang: Language = nil): Buffer =
+proc new_buffer*(path: string, lang: Language = nil): Buffer =
   let
     text = to_runes(path.read_file())
     indent_style = text.guess_indent_style()
@@ -677,6 +677,6 @@ proc make_buffer*(path: string, lang: Language = nil): Buffer =
     newline_style: newline_style
   )
 
-proc make_buffer*(path: string, langs: seq[Language]): Buffer =
+proc new_buffer*(path: string, langs: seq[Language]): Buffer =
   let lang = langs.detect_language(path)
-  return make_buffer(path, lang = lang)
+  return new_buffer(path, lang = lang)
