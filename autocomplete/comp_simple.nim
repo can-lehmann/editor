@@ -26,7 +26,7 @@ import ../utils, ../buffer, ../highlight/highlight, autocomplete, ../log
 proc new_markdown_autocompleter*(log: Log): Autocompleter =
   SimpleContext(
     defs: to_table({
-      TokenHeading: DefHeading
+      TokenHeading: SymHeading
     }),
     log: log
   )
@@ -38,12 +38,12 @@ const HTML_TAGS = map(@[
   "table", "thead", "tr", "td", "th", "tbody", "tfoot",
   "caption", "input", "button", "code", "template",
   "noscript", "textarea"
-], tag => Completion(kind: CompTag, text: to_runes(tag)))
+], tag => Symbol(kind: SymTag, name: to_runes(tag)))
 
 proc new_html_autocompleter*(log: Log): Autocompleter =
   SimpleContext(
     defs: to_table({
-      TokenTag: DefTag
+      TokenTag: SymTag
     }),
     comps: HTML_TAGS,
     triggers: @[

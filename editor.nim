@@ -61,8 +61,8 @@ type
   # FindDef
   FindDef = ref object
     entry: Entry
-    shown_defs: seq[Definition]
-    defs: seq[Definition]
+    shown_symbols: seq[Symbol]
+    symbols: seq[Symbol]
     list: List
     editor: Editor
   
@@ -89,7 +89,7 @@ type
     cursor_hook_id: int
     window_size: Index2d
     autocompleter: Autocompleter
-    completions: seq[Completion]
+    completions: seq[Symbol]
     completion_time: Time
   
   Tool* = object
@@ -225,44 +225,33 @@ proc make_quick_open(app: App): owned QuickOpen =
   )
 
 # Dialog / Find Def
-proc `$`(def_kind: DefKind): string =
-  case def_kind:
-    of DefMethod: return "method"
-    of DefProc: return "proc"
-    of DefFunc: return "func"
-    of DefMacro: return "macro"
-    of DefConverter: return "converter"
-    of DefTemplate: return "template"
-    of DefVar: return "var"
-    of DefLet: return "let"
-    of DefConst: return "const"
-    of DefIterator: return "iterator"
-    of DefField: return "field"
-    of DefType: return "type" 
-    of DefUnknown: return "unknown"
-    of DefHeading: return "heading"
-    of DefTag: return "tag"
-
-proc matches(def: Definition, pattern: string): bool =
+proc matches(sym: Symbol, pattern: string): bool =
   let
     parts = pattern.to_lower().split(" ")
-    name = to_lower($def.name)
+    name = to_lower($sym.name)
+  result = true
   for part in parts:
     if part notin name and
-       part notin $def.kind:
+       part notin $sym.kind:
       return false
-  return true
+
+proc format_sym_kind(kind: SymbolKind): string =
+  result = ($kind)[len("Sym")..^1].to_lower_ascii()
 
 proc update_list(find_def: FindDef) =
-  find_def.shown_defs = find_def.defs.filter(def =>
+  find_def.shown_symbols = find_def.symbols.filter(def =>
     def.matches($find_def.entry.text))
   
-  let kind_width = find_def.shown_defs
-    .map(def => len($def.kind))
-    .foldl(max(a, b), 0)
-
-  find_def.list.items = find_def.shown_defs.map(def =>
-    to_runes(strutils.align_left($def.kind, kind_width + 1)) & def.name)
+  var kind_width = 0
+  for sym in find_def.shown_symbols:
+    kind_width = kind_width.max(sym.kind.format_sym_kind().len) 
+  
+  find_def.list.items = @[]
+  for sym in find_def.shown_symbols:
+    find_def.list.items.add(to_runes(
+      strutils.align_left(sym.kind.format_sym_kind(), kind_width + 1) &
+      $sym.name
+    )) 
   
   if not find_def.list.detached:
     find_def.list.view = 0
@@ -276,10 +265,10 @@ proc jump*(editor: Editor, start, stop: int)
 
 proc jump_to_selected(find_def: FindDef, editor: Editor) =
   if find_def.list.selected < 0 or
-     find_def.list.selected >= find_def.shown_defs.len:
+     find_def.list.selected >= find_def.shown_symbols.len:
     return
   let
-    def = find_def.shown_defs[find_def.list.selected]
+    def = find_def.shown_symbols[find_def.list.selected]
     pos = editor.buffer.to_index(def.pos)
   editor.jump(pos)
   editor.dialog = Dialog(kind: DialogNone)
@@ -330,8 +319,8 @@ proc render(find_def: FindDef, box: Box, ren: var TermRenderer) =
   ren.move_to(box.min + Index2d(x: sidebar_width + 1, y: 1))
   find_def.entry.render(ren)
 
-proc set_defs(find_def: FindDef, defs: seq[Definition]) =
-  find_def.defs = defs
+proc set_defs(find_def: FindDef, defs: seq[Symbol]) =
+  find_def.symbols = defs
   find_def.update_list()
 
 proc make_find_def(editor: Editor): FindDef =
@@ -343,7 +332,7 @@ proc make_find_def(editor: Editor): FindDef =
   if editor.autocompleter != nil:
     editor.autocompleter.list_defs(
       editor.buffer,
-      proc (defs: seq[Definition]) =
+      proc (defs: seq[Symbol]) =
         find_def.set_defs(defs)
     )
   return find_def
@@ -623,7 +612,7 @@ proc completion_query(editor: Editor): seq[Rune] =
     result = editor.buffer[pos] & result
     pos -= 1
 
-proc filter_completions(editor: Editor): seq[Completion] =
+proc filter_completions(editor: Editor): seq[Symbol] =
   if editor.completions.len == 0:
     return @[]
   let query = editor.completion_query()
@@ -830,7 +819,7 @@ proc trigger_autocomplete(editor: Editor, chr: Rune) =
     start_time = get_time()
   editor.autocompleter.complete(
     editor.buffer, pos, chr,
-    proc (comps: seq[Completion]) =
+    proc (comps: seq[Symbol]) =
       if editor.completion_time > start_time:
         return
       editor.completions = comps
@@ -999,7 +988,7 @@ method process_key(editor: Editor, key: Key) =
             let comps = editor.filter_completions()
             if comps.len > 0:
               let
-                text = comps[0].text
+                text = comps[0].name
                 query = editor.completion_query()
               for cursor in editor.cursors:
                 if cursor.kind != CursorInsert:
@@ -1176,9 +1165,9 @@ proc compute_line_numbers_width(editor: Editor): int =
     result += 1
     max_line_number = max_line_number div 10
 
-proc compute_width(comps: seq[Completion]): int =
+proc compute_width(comps: seq[Symbol]): int =
   for comp in comps:
-    result = max(result, comp.text.len + 1)
+    result = max(result, comp.name.len + 1)
 
 const
   CHAR_VERTICAL = to_runes("│")[0]
@@ -1408,57 +1397,57 @@ method render(editor: Editor, box: Box, ren: var TermRenderer) =
       fg_color = Color(base: ColorWhite)
       kind_chr: Rune = '.'
     case comp.kind:
-      of CompProc:
+      of SymProc:
         kind_chr = 'p'
         bg_color = Color(base: ColorRed)
-      of CompFunc:
+      of SymFunc:
         kind_chr = 'f'
         bg_color = Color(base: ColorRed)
-      of CompConverter:
+      of SymConverter:
         kind_chr = 'c'
         bg_color = Color(base: ColorRed)
-      of CompMethod:
+      of SymMethod:
         kind_chr = 'm'
         bg_color = Color(base: ColorRed)
-      of CompTemplate:
+      of SymTemplate:
         kind_chr = 't'
         bg_color = Color(base: ColorRed)
-      of CompIterator:
+      of SymIterator:
         kind_chr = 'i'
         bg_color = Color(base: ColorRed)
-      of CompMacro:
+      of SymMacro:
         kind_chr = 'm'
         bg_color = Color(base: ColorRed)
-      of CompConst:
+      of SymConst:
         kind_chr = 'c'
         bg_color = Color(base: ColorYellow)
-      of CompLet:
+      of SymLet:
         kind_chr = 'l'
         bg_color = Color(base: ColorYellow)
-      of CompVar:
+      of SymVar:
         kind_chr = 'v'
         bg_color = Color(base: ColorYellow)
-      of CompType:
+      of SymType:
         kind_chr = 't'
         bg_color = Color(base: ColorCyan)
-      of CompField:
+      of SymField:
         kind_chr = 'f'
         bg_color = Color(base: ColorCyan)
-      of CompEnum:
+      of SymEnum:
         kind_chr = 'e'
         bg_color = Color(base: ColorCyan)
-      of CompTag:
+      of SymTag:
         kind_chr = 't'
         bg_color = Color(base: ColorRed)
       else: discard
     if bg_color.base == ColorYellow:
       fg_color.base = ColorBlack
     ren.put($kind_chr & " ", fg=fg_color, bg=bg_color)
-    let padding = sequtils.repeat(Rune(' '), comp_width - comp.text.len - 1)
+    let padding = sequtils.repeat(Rune(' '), comp_width - comp.name.len - 1)
     if it == 0:
-      ren.put(comp.text & padding, reverse=true)
+      ren.put(comp.name & padding, reverse=true)
     else:
-      ren.put(comp.text & padding, fg=Color(base:ColorWhite), bg=Color(base:ColorBlack))
+      ren.put(comp.name & padding, fg=Color(base:ColorWhite), bg=Color(base:ColorBlack))
 
   # Render prompt
   case editor.prompt.kind:

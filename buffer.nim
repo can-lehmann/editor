@@ -24,31 +24,18 @@ import strutils, unicode, sequtils, sugar, tables
 import utils, highlight/highlight, log
 
 type
-  DefKind* = enum
-    DefUnknown
-    DefLet, DefConst, DefVar,
-    DefProc, DefMethod, DefTemplate, DefFunc,
-    DefMacro, DefIterator, DefConverter,
-    DefType, DefField,
-    DefHeading, DefTag
-    
-  Definition* = object
-    kind*: DefKind
+  SymbolKind* = enum
+    SymNone,
+    SymLet, SymConst, SymVar,
+    SymProc, SymMethod, SymTemplate, SymFunc,
+    SymMacro, SymIterator, SymConverter,
+    SymType, SymField, SymEnum,
+    SymHeading, SymTag
+  
+  Symbol* = object
+    kind*: SymbolKind
     name*: seq[Rune]
     pos*: Index2d
-
-  CompKind* = enum
-    CompUnknown,
-    CompMod,
-    CompConst, CompLet, CompVar
-    CompEnum, CompType, CompField,
-    CompProc, CompFunc, CompConverter, CompMethod,
-    CompIterator, CompTemplate, CompMacro,
-    CompTag
-
-  Completion* = object
-    kind*: CompKind
-    text*: seq[Rune]
 
   Autocompleter* = ref object of RootObj
     triggers*: seq[Rune]
@@ -104,7 +91,7 @@ method complete*(ctx: Autocompleter,
                  buffer: Buffer,
                  pos: int,
                  trigger: Rune,
-                 callback: proc (comps: seq[Completion])) {.base.} =
+                 callback: proc (comps: seq[Symbol])) {.base.} =
   quit "Abstract method complete"
 
 method poll*(ctx: Autocompleter) {.base.} =
@@ -115,13 +102,13 @@ method close*(ctx: Autocompleter) {.base.} =
 
 method list_defs*(ctx: Autocompleter,
                   buffer: Buffer,
-                  callback: proc (defs: seq[Definition])) {.base.} =
+                  callback: proc (defs: seq[Symbol])) {.base.} =
   quit "Abstract methods list_defs"
 
 method buffer_info*(ctx: Autocompleter, buffer: Buffer): seq[string] {.base.} = @[]
 
-proc search*(comps: seq[Completion], query: seq[Rune]): seq[Completion] =
-  comps.filter(comp => comp.text.find(query) != -1)
+proc search*(syms: seq[Symbol], query: seq[Rune]): seq[Symbol] =
+  syms.filter(sym => sym.name.find(query) != -1)
 
 # Language
 proc detect_language*(langs: seq[Language], path: string): Language =

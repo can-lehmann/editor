@@ -33,14 +33,14 @@ method complete(ctx: Context,
                 buffer: Buffer,
                 pos: int,
                 trigger: Rune,
-                callback: proc (comps: seq[Completion])) =
+                callback: proc (comps: seq[Symbol])) =
   callback(@[])
 
 method list_defs(ctx: Context,
                  buffer: Buffer,
-                 callback: proc(defs: seq[Definition])) =
+                 callback: proc(defs: seq[Symbol])) =
   buffer.update_tokens()
-  var defs: seq[Definition]
+  var defs: seq[Symbol]
   for it in 1..<buffer.tokens.len:
     let
       keyword = buffer.tokens[it - 1]
@@ -48,8 +48,8 @@ method list_defs(ctx: Context,
     if keyword.kind == TokenKeyword and
        $buffer.text[keyword.start..<keyword.stop] == "function" and
        name.kind == TokenName:
-      defs.add(Definition(
-        kind: DefFunc,
+      defs.add(Symbol(
+        kind: SymFunc,
         name: buffer.text[name.start..<name.stop],
         pos: buffer.to_2d(keyword.start)
       ))

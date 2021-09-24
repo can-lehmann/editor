@@ -25,8 +25,8 @@ import ../buffer, ../utils, ../highlight/highlight, ../log
 
 type
   SimpleContext* = ref object of Autocompleter
-    comps*: seq[Completion]
-    defs*: Table[TokenKind, DefKind]
+    comps*: seq[Symbol]
+    defs*: Table[TokenKind, SymbolKind]
     log*: Log
 
 method track(ctx: SimpleContext, buffer: Buffer) =
@@ -44,11 +44,11 @@ method complete*(ctx: SimpleContext,
                  buffer: Buffer,
                  pos: int,
                  trigger: Rune,
-                 callback: proc (comps: seq[Completion])) =
+                 callback: proc (comps: seq[Symbol])) =
   let query = ctx.extract_query(buffer, pos)
-  var completions: seq[Completion]
+  var completions: seq[Symbol]
   for comp in ctx.comps:
-    if comp.text.find(query) != -1:
+    if comp.name.find(query) != -1:
       completions.add(comp)
   callback(completions)
 
@@ -56,13 +56,13 @@ method poll*(ctx: SimpleContext) = discard
 
 method list_defs*(ctx: SimpleContext,
                   buffer: Buffer,
-                  callback: proc (defs: seq[Definition])) =
+                  callback: proc (defs: seq[Symbol])) =
   buffer.update_tokens()
-  var defs: seq[Definition] = @[]
+  var defs: seq[Symbol] = @[]
   for token in buffer.tokens:
     if token.kind notin ctx.defs:
       continue
-    defs.add(Definition(
+    defs.add(Symbol(
       kind: ctx.defs[token.kind],
       name: buffer.text[token.start..(token.stop - 1)],
       pos: buffer.to_2d(token.start)
