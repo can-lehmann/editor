@@ -27,8 +27,8 @@ import utils, termdiff
 type
   CopyBuffer* = ref object
     history*: Deque[seq[Rune]]
-    
-proc make_copy_buffer*(): owned CopyBuffer =
+
+proc new_copy_buffer*(): owned CopyBuffer =
   return CopyBuffer(history: init_deque[seq[Rune]]())
 
 proc copy*(buffer: CopyBuffer, str: seq[Rune]) =

@@ -27,11 +27,7 @@ import highlight/[lisp, json, html, markdown, cpp, nim, lua, css]
 import autocomplete/[comp_nim, comp_simple, comp_lua]
 import tools/[base_tools, json_tools]
 
-setup_term()
-system.add_quit_proc(quit_app)
-
 var
-  cur_screen = make_term_screen()
   languages = @[
     Language(
       name: "Nim",
@@ -125,25 +121,24 @@ if param_count() > 0:
 
 app.root_pane = root_pane
 
-block:
-  var ren = make_term_renderer(cur_screen)
-  app.render(ren)
-  cur_screen.show_all()
+let term = new_terminal()
+
+proc quit_app() {.noconv.} = term.destroy()
+system.add_quit_proc(quit_app)
+
+var ren = init_term_renderer(term)
+app.render(ren)
+term.redraw()
 
 while true:
-  let key = read_key()
-  
+  if term.poll():
+    break
+  let key = term.read_key()
   if key.kind == KeyMouse:
-    app.process_mouse(read_mouse())
+    app.process_mouse(term.read_mouse(), ren.screen.size)
   else:
     if app.process_key(key):
-      quit_app()
       break
   
-  var
-    screen = make_term_screen()
-    ren = make_term_renderer(screen)
   app.render(ren)
-
-  cur_screen.apply(screen)
-  cur_screen = screen
+  term.redraw()

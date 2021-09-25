@@ -22,7 +22,7 @@
 
 import tables, unicode, strutils, deques, hashes, colors, times, os
 import sdl2, sdl2/ttf
-import "../utils"
+import ../utils
 import common
 
 type
@@ -138,7 +138,7 @@ proc recompute_screen_size(term: Terminal) =
     x = max(w div term.cell_size.x, 1)
     y = max(h div term.cell_size.y, 1)
   if x != term.screen.width or y != term.screen.height:  
-    term.screen = make_term_screen(x, y)
+    term.screen.resize(x, y)
     if term.key_queue.len == 0:
       term.key_queue.add_last(Key(kind: KeyUnknown).add_modifiers(term))
 
@@ -156,7 +156,7 @@ proc set_font_size(term: Terminal, font_size: int) =
   )
   term.recompute_screen_size()
 
-proc redraw(term: Terminal) =
+proc redraw*(term: Terminal) =
   let
     current_time = now()
     dtime = (current_time - term.ptime).in_microseconds.int / 1_000_000
@@ -198,9 +198,7 @@ proc redraw(term: Terminal) =
   
   term.ren.present()
 
-proc update(term: Terminal): bool =
-  term.redraw()
-  
+proc poll*(term: Terminal): bool =
   var evt = sdl2.default_event
   if not wait_event_timeout(evt, 100):
     return
@@ -383,9 +381,9 @@ proc update(term: Terminal): bool =
     if not poll_event(evt):
       return
 
-proc destroy(term: Terminal) =
+proc destroy*(term: Terminal) =
   term.ren.destroy()
-  term.window.destroy()  
+  term.window.destroy()
 
 proc write(term: Terminal, rune: Rune) =
   case rune:
@@ -414,7 +412,10 @@ proc move_to(term: Terminal, pos: Index2d) =
 proc move_to(term: Terminal, x, y: int) =
   term.cursor.pos = Index2d(x: x, y: y)
 
-proc make_terminal(): Terminal =
+proc new_terminal*(): Terminal =
+  sdl2.init(INIT_EVERYTHING)
+  ttf_init()
+  
   let
     window = create_window("Editor", 100, 100, 640, 480, SDL_WINDOW_RESIZABLE or
                                                          SDL_WINDOW_SHOWN)
@@ -429,7 +430,7 @@ proc make_terminal(): Terminal =
     ren: ren,
     font: font,
     font_size: 12,
-    screen: make_term_screen(80, 25),
+    screen: new_term_screen(80, 25),
     default_fg: rgb(255, 255, 255),
     default_bg: rgb(0, 0, 0),
     colors: @[
@@ -459,57 +460,14 @@ proc make_terminal(): Terminal =
     cint(result.cell_size.y * result.screen.height)
   )
 
-# Interface
-var terminal: Terminal
+proc init_term_renderer*(term: Terminal): TermRenderer =
+  result = init_term_renderer(term.screen)
 
-proc setup_term*() =
-  sdl2.init(INIT_EVERYTHING)
-  ttf_init()
-  terminal = make_terminal()
+proc read_key*(term: Terminal): Key =
+  if term.key_queue.len > 0:
+    result = term.key_queue.pop_first()
 
-proc set_cursor_pos*(x, y: int) = terminal.move_to(x, y)
-proc term_write*(rune: Rune) = terminal.write(rune)
-proc term_write*(chr: char) = terminal.write(chr)
+proc read_mouse*(term: Terminal): Mouse =
+  if term.mouse_queue.len > 0:
+    result = term.mouse_queue.pop_first()
 
-proc apply_style*(cell: CharCell) =
-  terminal.cursor.fg = cell.fg
-  terminal.cursor.bg = cell.bg
-  terminal.cursor.reverse = cell.reverse
-
-proc apply_style*(a, b: CharCell) = b.apply_style()
-
-proc term_refresh*() =
-  discard terminal.update()
-
-proc reset_term*() =
-  terminal.destroy()
-  ttf_quit()
-
-proc read_key*(): Key =
-  if terminal.key_queue.len == 0:
-    return Key(kind: KeyNone)
-  return terminal.key_queue.pop_first()
-
-proc read_mouse*(): Mouse =
-  if terminal.mouse_queue.len == 0:
-    return Mouse(kind: MouseNone)
-  return terminal.mouse_queue.pop_first()
-
-proc terminal_width*(): int = terminal.screen.width
-proc terminal_height*(): int = terminal.screen.height
-
-when is_main_module:
-  block:
-    sdl2.init(INIT_EVERYTHING)
-    ttf_init()
-    
-    let terminal = make_terminal()
-    terminal.write("Hello, world!\n")
-    terminal.write("ABC")
-    while true:
-      if terminal.update():
-        break
-  
-    terminal.destroy()
-    ttf_quit()
-  

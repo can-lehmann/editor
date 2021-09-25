@@ -445,7 +445,7 @@ proc make_app*(languages: seq[Language], window_constructors: seq[WindowConstruc
   for it, lang in languages.pairs:
     lang.id = it
   return App(
-    copy_buffer: make_copy_buffer(),
+    copy_buffer: new_copy_buffer(),
     root_pane: nil,
     languages: languages,
     window_constructors: window_constructors,
@@ -485,11 +485,8 @@ proc list_changed*(app: App): seq[string] =
     if app.buffers[path].changed:
       result.add(path)
 
-proc process_mouse*(app: App, mouse: Mouse) =
-  discard app.root_pane.process_mouse(mouse, Box(
-    min: Index2d(x: 0, y: 0),
-    max: Index2d(x: terminal_width(), y: terminal_height())
-  ))
+proc process_mouse*(app: App, mouse: Mouse, size: Index2d) =
+  discard app.root_pane.process_mouse(mouse, Box(max: size))
 
 proc close*(app: App) =
   for comp in app.autocompleters.values:
@@ -582,7 +579,5 @@ proc process_key*(app: App, key: Key): bool =
       return false
 
 proc render*(app: App, ren: var TermRenderer) =
+  ren.clear()
   app.root_pane.render(ren)
-
-proc quit_app*() {.noconv.} =
-  reset_term()

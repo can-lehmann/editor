@@ -103,11 +103,25 @@ var
 
 var stdscr {.header: "<ncurses.h>", importc.}: Window
 
-# Backend Interface
-var
+proc terminal_width(): int = stdscr.getmaxx().int()
+proc terminal_height(): int = stdscr.getmaxy().int()
+
+type Terminal* = ref object
+  # Initial State
   prev_mouse_mask: MouseMask
   prev_mouse_interval: cint
-proc setup_term*() =
+  # Input
+  buttons: array[3, bool]
+  ptime: Time
+  pbutton: int
+  pclicks: int
+  # Rendering
+  color_pairs: Table[tuple[fg, bg: Color], int]
+  # Screen
+  screen: TermScreen
+
+proc new_terminal*(): Terminal =
+  result = Terminal(pbutton: -1, ptime: get_time())
   setlocale(LC_ALL, "")
   discard initscr()
   discard disable_echo()
@@ -116,25 +130,34 @@ proc setup_term*() =
   discard cbreak()
   nonl()
   discard keypad(stdscr, true)
-  discard mousemask(ALL_MOUSE_EVENTS or REPORT_MOUSE_POSITION, prev_mouse_mask.addr)
-  prev_mouse_interval = mouseinterval(0)
+  discard mousemask(ALL_MOUSE_EVENTS or REPORT_MOUSE_POSITION, result.prev_mouse_mask.addr)
+  result.prev_mouse_interval = mouseinterval(0)
 
   timeout(10)
   raw()
   curs_set(0)
-  stdout.write("\x1b[?1003h\n")  
-  
-proc reset_term*() =
+  stdout.write("\x1b[?1003h\n")
+  result.screen = new_term_screen(terminal_width(), terminal_height())
+
+proc destroy*(term: Terminal) =
   stdout.write("\x1b[?1003l\n")  
   
-  discard mousemask(prev_mouse_mask, nil)
-  discard mouseinterval(prev_mouse_interval)
+  discard mousemask(term.prev_mouse_mask, nil)
+  discard mouseinterval(term.prev_mouse_interval)
   discard notimeout(stdscr, true)
   discard enable_echo()
   discard endwin()
-  
-proc read_key*(): Key =
+
+proc recompute_screen_size*(term: Terminal) =
+  let (width, height) = (terminal_width(), terminal_height())
+  if width != term.screen.width or height != term.screen.height:
+    term.screen.resize(width, height)
+
+proc poll*(term: Terminal): bool = discard
+
+proc read_key*(term: Terminal): Key =
   let key_code = getch().int()
+  term.recompute_screen_size()
   
   if key_code == KEY_MOUSE_VALUE:
     return Key(kind: KeyMouse)
@@ -201,14 +224,7 @@ proc read_key*(): Key =
 
   return Key(kind: KeyUnknown, key_code: key_code)
 
-
-var
-  buttons: array[3, bool] = [false, false, false]
-  ptime = get_time()
-  pbutton = -1
-  pclicks = 0
-
-proc read_mouse*(): Mouse =
+proc read_mouse*(term: Terminal): Mouse =
   var event: MouseEvent
 
   if getmouse(event.addr) != OK:
@@ -219,7 +235,7 @@ proc read_mouse*(): Mouse =
     button = -1
 
   if (event.bstate and REPORT_MOUSE_POSITION) != 0:
-    return Mouse(kind: MouseMove, x: event.x.int, y: event.y.int, buttons: buttons)
+    return Mouse(kind: MouseMove, x: event.x.int, y: event.y.int, buttons: term.buttons)
   elif (event.bstate and BUTTON1_PRESSED) != 0:
     button = 0
     state = true
@@ -239,119 +255,85 @@ proc read_mouse*(): Mouse =
     button = 2
     state = false
   elif (event.bstate and BUTTON4_PRESSED) != 0:
-    return Mouse(kind: MouseScroll, delta: -1, x: event.x.int, y: event.y.int, buttons: buttons)
+    return Mouse(kind: MouseScroll, delta: -1, x: event.x.int, y: event.y.int, buttons: term.buttons)
   elif (event.bstate and BUTTON4_RELEASED) != 0:
-    return Mouse(kind: MouseScroll, delta: -1, x: event.x.int, y: event.y.int, buttons: buttons)
+    return Mouse(kind: MouseScroll, delta: -1, x: event.x.int, y: event.y.int, buttons: term.buttons)
   elif (event.bstate and BUTTON5_PRESSED) != 0:
-    return Mouse(kind: MouseScroll, delta: 1, x: event.x.int, y: event.y.int, buttons: buttons)
+    return Mouse(kind: MouseScroll, delta: 1, x: event.x.int, y: event.y.int, buttons: term.buttons)
   elif (event.bstate and BUTTON5_RELEASED) != 0:
-    return Mouse(kind: MouseScroll, delta: 1, x: event.x.int, y: event.y.int, buttons: buttons)
+    return Mouse(kind: MouseScroll, delta: 1, x: event.x.int, y: event.y.int, buttons: term.buttons)
   
   if button == -1:
     return Mouse(kind: MouseUnknown,
       x: event.x.int, y: event.y.int,
       state: event.bstate.uint16,
-      buttons: buttons
+      buttons: term.buttons
     )
   
-  buttons[button] = state
+  term.buttons[button] = state
   
-  if pbutton == button and
-     (get_time() - ptime).in_milliseconds() < 200:
+  if term.pbutton == button and
+     (get_time() - term.ptime).in_milliseconds() < 200:
     if state:
-      pclicks += 1
+      term.pclicks += 1
   else:
-    pclicks = 1
+    term.pclicks = 1
   
   if state:
-    ptime = get_time()
-    pbutton = button
-    
-  if state:    
+    term.ptime = get_time()
+    term.pbutton = button
+  
+  if state:
     return Mouse(kind: MouseDown,
-      button: button, buttons: buttons,
-      clicks: pclicks,
+      button: button, buttons: term.buttons,
+      clicks: term.pclicks,
       x: event.x.int, y: event.y.int
     )
   else:
     return Mouse(kind: MouseUp,
-      button: button, buttons: buttons,
-      clicks: pclicks,
+      button: button, buttons: term.buttons,
+      clicks: term.pclicks,
       x: event.x.int, y: event.y.int
     )
-
-proc terminal_width*(): int = stdscr.getmaxx().int()
-proc terminal_height*(): int = stdscr.getmaxy().int()
 
 proc hash(color: Color): Hash =
   return !$(color.base.hash() !& color.bright.hash())
 
-var color_pairs = init_table[tuple[fg: Color, bg: Color], int]()
-
-proc color_tuple(cell: CharCell): tuple[fg: Color, bg: Color] =
+proc color_tuple(cell: CharCell): tuple[fg, bg: Color] =
   return (fg: cell.fg, bg: cell.bg)
 
 proc ord(color: Color): int =
   if color.base == ColorDefault:
     return -1
-  
   result = ord(color.base)
-  #if color.bright:
-  #  result += 8
 
-proc register_color_pair(cell: CharCell) =
-  let id = color_pairs.len + 1
-  discard init_pair(id.cshort, cell.fg.ord.cshort, cell.bg.ord.cshort)
-  color_pairs[cell.color_tuple()] = id
-
-proc apply_style*(cell: CharCell) =
-  if cell.reverse:
-    discard attron(A_REVERSE)
+proc lookup_color_pair(term: Terminal, cell: CharCell): cshort =
+  let index = cell.color_tuple()
+  if index notin term.color_pairs:
+    let id = term.color_pairs.len + 1
+    discard init_pair(id.cshort, cell.fg.ord.cshort, cell.bg.ord.cshort)
+    term.color_pairs[index] = id
+    result = id.cshort
   else:
-    discard attroff(A_REVERSE)
-  
-  if not color_pairs.has_key(cell.color_tuple()):
-    cell.register_color_pair()
-  discard color_set(color_pairs[cell.color_tuple()].cshort, nil)
-  
-proc apply_style*(a, b: CharCell) =
-  apply_style(b)
-  
-proc set_cursor_pos*(x, y: int) =
-  discard move(y.cint(), x.cint())
+    result = term.color_pairs[index].cshort
 
-proc term_write*(chr: char) =
-  discard addch(chr)
-
-proc term_write*(rune: Rune) =
-  var str = cstring($rune)
-  discard addstr(str)
-
-proc term_refresh*() =
+proc redraw*(term: Terminal) =
+  for y in 0..<term.screen.height:
+    discard move(cint(y + 0), 0)
+    for x in 0..<term.screen.width:
+      let cell = term.screen[x, y]
+      if cell.reverse:
+        discard attron(A_REVERSE)
+      else:
+        discard attroff(A_REVERSE)
+      
+      discard color_set(term.lookup_color_pair(cell), nil)
+      
+      if cell.chr.ord < 128:
+        discard addch(char(cell.chr.ord))
+      else:
+        discard addstr(cstring($cell.chr))
   discard refresh()
 
-# Test
-when isMainModule:
-  discard initscr()
-  discard disable_echo()
-  discard start_color()
-  discard use_default_colors()
-  discard init_pair(1, 3, -1)
-  discard attrset(A_NORMAL)
-  discard color_set(1, nil)
-  discard cbreak()
-  nonl()
-  discard keypad(stdscr, true)
-  raw()
-  discard mousemask(ALL_MOUSE_EVENTS or REPORT_MOUSE_POSITION, nil)
-  discard addstr($has_mouse())
-  var it = 1
-  while true:
-    let chr = getch().int()
-    if chr == ord('q'):
-      break
-    discard move(it.cint, 0)
-    discard addstr($chr)
-    it += 1
-    discard refresh()
-  discard endwin()
+proc init_term_renderer*(term: Terminal): TermRenderer =
+  result = init_term_renderer(term.screen)
