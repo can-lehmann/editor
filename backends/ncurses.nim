@@ -270,7 +270,6 @@ proc read_mouse*(term: Terminal): Mouse =
       buttons: term.buttons
     )
   
-  term.buttons[button] = state
   
   if term.pbutton == button and
      (get_time() - term.ptime).in_milliseconds() < 200:
@@ -284,17 +283,21 @@ proc read_mouse*(term: Terminal): Mouse =
     term.pbutton = button
   
   if state:
+    term.buttons[button] = state
     return Mouse(kind: MouseDown,
       button: button, buttons: term.buttons,
       clicks: term.pclicks,
       x: event.x.int, y: event.y.int
     )
-  else:
+  elif term.buttons[button]:
+    term.buttons[button] = state
     return Mouse(kind: MouseUp,
       button: button, buttons: term.buttons,
       clicks: term.pclicks,
       x: event.x.int, y: event.y.int
     )
+  else:
+    return Mouse(kind: MouseMove, x: event.x.int, y: event.y.int, buttons: term.buttons)
 
 proc hash(color: Color): Hash =
   return !$(color.base.hash() !& color.bright.hash())

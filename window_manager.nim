@@ -40,7 +40,9 @@ type
     name: string
     make: proc (app: App): Window
   
-  AppMode* = enum AppModeNone, AppModePane, AppModeNewPane
+  AppMode* = enum
+    AppModeNone, AppModePane,
+    AppModeNewPane, AppModeResizePane
   
   Panes*[T] = object
     axis: Axis
@@ -243,11 +245,12 @@ proc close_active_window*(panes: var Panes[Panes[Window]]) =
     panes.adjust_sizes()
     panes.constrain_selected()
 
-proc process_mouse*(window: Window, mouse: Mouse, box: Box) =
+proc process_mouse*(window: Window, mouse: Mouse, box: Box, app: App) =
   var mouse_rel = mouse
   mouse_rel.x -= box.min.x
   mouse_rel.y -= box.min.y
-  discard window.process_mouse(mouse_rel)
+  if window.process_mouse(mouse_rel) and mouse.kind == MouseDown:
+    app.mode = AppModeResizePane
 
 iterator iter_layout[T](panes: Panes[T], box: Box): (int, Box, T) =
   var offset = 0
@@ -263,19 +266,27 @@ iterator iter_layout[T](panes: Panes[T], box: Box): (int, Box, T) =
     yield (it, child_box, child)
     offset += space
 
-proc process_mouse*[T](panes: var Panes[T], mouse: Mouse, box: Box) =
-  for it, child_box, child in panes.iter_layout(box):
-    if child_box.is_inside(mouse.pos):
-      if mouse.kind == MouseDown:
-        panes.selected = it
-      panes.children[it].process_mouse(mouse, child_box)
-      break
+proc process_mouse*[T](panes: var Panes[T], mouse: Mouse, box: Box, app: App) =
+  case mouse.kind:
+    of MouseDown, MouseScroll:
+      for it, child_box, child in panes.iter_layout(box):
+        if child_box.is_inside(mouse.pos):
+          if mouse.kind == MouseDown:
+            panes.selected = it
+          panes.children[it].process_mouse(mouse, child_box, app)
+          break
+    else:
+      for it, child_box, child in panes.iter_layout(box):
+        if it == panes.selected:
+          panes.children[it].process_mouse(mouse, child_box, app)
+          break
 
 proc process_key*[T](panes: Panes[T], key: Key) =
   panes.children[panes.selected].process_key(key)
 
 proc render*[T](panes: Panes[T], box: Box, ren: var TermRenderer) =
   for it, child_box, child in panes.iter_layout(box):
+    ren.clip(box)
     child.render(child_box, ren)
 
 proc add*[T](panes: var Panes[T], child: T, size: float64 = 1) =
@@ -309,6 +320,24 @@ proc split*(panes: var Panes[Panes[Window]], dir: Direction, app: App) =
     panes.selected += offset
   else:
     panes.children[panes.selected].split(dir, app)
+
+proc resize*(panes: Window, pos: Index2d, box: Box) = discard
+proc resize*[T](panes: var Panes[T], pos: Index2d, box: Box) =
+  for it, child_box, child in panes.iter_layout(box):
+    if it == panes.selected:
+      panes.children[panes.selected].resize(pos, child_box)
+  
+  if panes.selected > 0:
+    var base: float64 = 0.0
+    for it in 0..<(panes.selected - 1):
+      base += panes.sizes[it]
+    
+    let
+      frac = pos[panes.axis] / box.size[panes.axis]
+      total = panes.sizes[panes.selected] + panes.sizes[panes.selected - 1]
+    var new_size = min(frac - base, total).max(0)
+    panes.sizes[panes.selected] = total - new_size
+    panes.sizes[panes.selected - 1] = new_size
 
 # App
 proc open_launcher(app: App) =
@@ -362,7 +391,13 @@ proc list_changed*(app: App): seq[string] =
       result.add(path)
 
 proc process_mouse*(app: App, mouse: Mouse, size: Index2d) =
-  app.columns.process_mouse(mouse, Box(max: size))
+  case app.mode:
+    of AppModeResizePane:
+      app.columns.resize(mouse.pos, Box(max: size))
+      if mouse.kind == MouseUp:
+        app.mode = AppModeNone
+    else: 
+      app.columns.process_mouse(mouse, Box(max: size), app)
 
 proc close*(app: App) =
   for comp in app.autocompleters.values:
@@ -415,7 +450,7 @@ proc process_key*(app: App, key: Key): bool =
         else: discard
       app.mode = AppModeNone
       return
-    of AppModeNone:
+    of AppModeNone, AppModeResizePane:
       case key.kind:
         of KeyQuit:
           return true
