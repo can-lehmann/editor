@@ -1,6 +1,8 @@
 # Editor
 A text editor written in Nim.
 
+![Screenshot](screenshot.png)
+
 ## Features
 - Quick Open
 - Multiple Cursors
