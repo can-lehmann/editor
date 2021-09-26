@@ -61,7 +61,7 @@ proc disable*(log: Log) =
 proc clear*(log: Log) =
   log.history = @[]
 
-proc make_log*(): Log =
+proc new_log*(): Log =
   result = Log()
   when defined(enable_log):
     result.enable()

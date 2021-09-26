@@ -121,7 +121,7 @@ method process_mouse(file_manager: FileManager, mouse: Mouse): bool =
         of ItemDir: file_manager.open(item.path)
         of ItemFile:
           let editor = file_manager.app.new_editor(item.path)
-          file_manager.app.root_pane.open_window(editor)
+          file_manager.app.columns.open_window(editor)
         else: discard
 
 proc go_up(file_manager: FileManager) =
@@ -142,7 +142,7 @@ method process_key(file_manager: FileManager, key: Key) =
           file_manager.mode = Mode(kind: ModeNone)
           file_manager.open(item.path)
         of ItemFile:
-          file_manager.app.root_pane.open_window(file_manager.app.new_editor(item.path))
+          file_manager.app.columns.open_window(file_manager.app.new_editor(item.path))
         else: discard
     of KeyArrowUp, KeyArrowDown:
       file_manager.list.process_key(key)

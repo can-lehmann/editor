@@ -22,32 +22,46 @@
 
 import unicode, strutils
 
-type  
-  Index2d* = object
-    x*: int
-    y*: int
-  
-  Box* = object
-    min*: Index2d
-    max*: Index2d
+type Index2d* = object
+  x*: int
+  y*: int
 
-  Direction* = enum DirUp, DirDown, DirLeft, DirRight
-
+{.push inline.}
 proc `+`*(a, b: Index2d): Index2d = Index2d(x: a.x + b.x, y: a.y + b.y)
 proc `-`*(a, b: Index2d): Index2d = Index2d(x: a.x - b.x, y: a.y - b.y)
 proc `*`*(a: Index2d, factor: int): Index2d = Index2d(x: a.x * factor, y: a.y * factor)
+{.pop.}
+
+type Box* = object
+  min*: Index2d
+  max*: Index2d
 
 proc size*(box: Box): Index2d = box.max - box.min
 proc is_inside*(box: Box, pos: Index2d): bool =
   return pos.x >= box.min.x and pos.x < box.max.x and
          pos.y >= box.min.y and pos.y < box.max.y
 
+type Direction* = enum DirLeft, DirRight, DirUp, DirDown
+
 proc to_index2d*(dir: Direction): Index2d =
   case dir:
-    of DirUp: return Index2d(x: 0, y: -1)
-    of DirDown: return Index2d(x: 0, y: 1)
-    of DirLeft: return Index2d(x: -1, y: 0)
-    of DirRight: return Index2d(x: 1, y: 0)
+    of DirUp: result = Index2d(x: 0, y: -1)
+    of DirDown: result = Index2d(x: 0, y: 1)
+    of DirLeft: result = Index2d(x: -1, y: 0)
+    of DirRight: result = Index2d(x: 1, y: 0)
+
+proc on_axis*(dir: Direction): int {.inline.} = (ord(dir) mod 2) * 2 - 1
+
+type Axis* = enum AxisX, AxisY
+
+proc `not`*(axis: Axis): Axis = Axis((ord(axis) + 1) mod 2)
+proc to_axis*(dir: Direction): Axis = Axis(ord(dir) div 2)
+
+{.push inline.}
+proc `[]`*(index: Index2d, axis: Axis): int = [index.x, index.y][ord(axis)]
+proc `[]`*(index: var Index2d, axis: Axis): var int = [index.x.addr, index.y.addr][ord(axis)][]
+proc `[]=`*(index: var Index2d, axis: Axis, val: int) = [index.x.addr, index.y.addr][ord(axis)][] = val
+{.pop.}
 
 proc is_ascii*(rune: Rune): bool = rune.int32 < 127
 proc to_char*(rune: Rune): char = rune.int32.char

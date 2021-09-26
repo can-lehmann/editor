@@ -21,7 +21,7 @@
 # SOFTWARE.
 
 import unicode, tables, os
-import termdiff, window_manager, buffer
+import termdiff, window_manager, buffer, utils
 import editor, keyinfo, calc, file_manager, log_viewer
 import highlight/[lisp, json, html, markdown, cpp, nim, lua, css]
 import autocomplete/[comp_nim, comp_simple, comp_lua]
@@ -105,21 +105,14 @@ var
     init_window_constructor("Log Viewer", new_log_viewer)
   ]
 
-var
-  app = make_app(languages, window_constructors)
-  root_pane = Pane(kind: PaneWindow, window: app.new_editor())
+var app = new_app(languages, window_constructors)
 
 if param_count() > 0:
-  root_pane = Pane(kind: PaneWindow,
-    window: app.new_editor(param_str(1).absolute_path(get_current_dir()))
-  )
-  for it in 2..param_count():
-    var pane = Pane(kind: PaneWindow,
-      window: app.new_editor(param_str(it).absolute_path(get_current_dir()))
-    )
-    root_pane = Pane(kind: PaneSplitH, factor: (it - 1) / it, pane_a: root_pane, pane_b: pane)
-
-app.root_pane = root_pane
+  for it in 1..param_count():
+    let editor = app.new_editor(param_str(it).absolute_path(get_current_dir()))
+    app.columns.add(init_panes(AxisY, @[editor]), 1 / param_count())
+else:
+  app.columns.add(init_panes(AxisY, @[app.new_editor()]))
 
 let term = new_terminal()
 

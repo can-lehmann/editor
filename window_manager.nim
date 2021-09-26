@@ -31,20 +31,7 @@ type
     name*: string
     shortcut*: seq[Key]
     cmd*: proc () {.closure.}
-
-  PaneKind* = enum PaneWindow, PaneSplitH, PaneSplitV
-  Pane* = ref PaneObj
-  PaneObj* = object
-   case kind*: PaneKind:
-    of PaneWindow:
-      is_dragging*: bool
-      window*: Window
-    of PaneSplitH, PaneSplitV:
-      factor*: float64
-      pane_a*: Pane
-      pane_b*: Pane
-      selected*: bool
-
+  
   Launcher* = ref object of Window
     app: App
     list: List
@@ -55,8 +42,14 @@ type
   
   AppMode* = enum AppModeNone, AppModePane, AppModeNewPane
   
+  Panes*[T] = object
+    axis: Axis
+    selected*: int
+    sizes*: seq[float64]
+    children*: seq[T]
+  
   App* = ref object
-    root_pane*: Pane
+    columns*: Panes[Panes[Window]]
     copy_buffer*: CopyBuffer
     languages*: seq[Language]
     window_constructors*: seq[WindowConstructor]
@@ -75,13 +68,13 @@ method list_commands*(window: Window): seq[Command] {.base.} = discard
 proc new_launcher(app: App): Window =
   return Launcher(app: app, list: make_list(app.window_constructors.map(c => c.name)))
 
-proc open_window*(pane: Pane, window: Window)
+proc open_window*[T](panes: var Panes[T], window: Window)
 
 proc open_selected(launcher: Launcher) =
   let
     selected = launcher.list.selected
     window = launcher.app.window_constructors[selected].make(launcher.app)
-  launcher.app.root_pane.open_window(window)
+  launcher.app.columns.open_window(window)
 
 method process_key(launcher: Launcher, key: Key) =
   case key.kind:
@@ -161,7 +154,7 @@ proc run_command(cmd_search: CommandSearch) =
   let selected = cmd_search.list.selected
   if selected < 0 or selected >= cmd_search.shown_commands.len:
     return
-  cmd_search.app.root_pane.open_window(cmd_search.prev_window)
+  cmd_search.app.columns.open_window(cmd_search.prev_window)
   cmd_search.shown_commands[selected].cmd()
 
 method process_mouse(cmd_search: CommandSearch, mouse: Mouse): bool =
@@ -182,7 +175,7 @@ method process_mouse(cmd_search: CommandSearch, mouse: Mouse): bool =
 method process_key(cmd_search: CommandSearch, key: Key) =
   if key.kind == KeyEscape or
      (key.kind == KeyChar and key.chr == 'e' and key.ctrl):
-    cmd_search.app.root_pane.open_window(cmd_search.prev_window)
+    cmd_search.app.columns.open_window(cmd_search.prev_window)
     return
   
   case key.kind:
@@ -203,254 +196,125 @@ method render(cmd_search: CommandSearch, box: Box, ren: var TermRenderer) =
   cmd_search.entry.render(ren)
   cmd_search.list.render(Box(min: box.min + Index2d(x: sidebar_width + 1, y: 2), max: box.max), ren)
 
-# Pane
-proc select_below*(pane: Pane): bool =
-  case pane.kind:
-    of PaneWindow: return false
-    of PaneSplitH:
-      if pane.selected:
-        return pane.pane_b.select_below()
-      else:
-        return pane.pane_a.select_below()
-    of PaneSplitV:
-      if pane.selected:
-        return pane.pane_b.select_below()
-      else:
-        if not pane.pane_a.select_below():
-          pane.selected = true
-        return true
+# Panes
 
-proc select_above*(pane: Pane): bool =
-  case pane.kind:
-    of PaneWindow: return false
-    of PaneSplitH:
-      if pane.selected:
-        return pane.pane_b.select_above()
-      else:
-        return pane.pane_a.select_above()
-    of PaneSplitV:
-      if pane.selected:
-        if not pane.pane_b.select_above():
-          pane.selected = false
-        return true
-      else:
-        return pane.pane_a.select_above()
+proc init_panes*[T](axis: Axis, children: seq[T]): Panes[T] =
+  result = Panes[T](
+    axis: axis,
+    children: children,
+    sizes: new_seq[float64](children.len)
+  )
+  for it in 0..<children.len:
+    result.sizes[it] = 1.0
 
-proc select_left*(pane: Pane): bool =
-  case pane.kind:
-    of PaneWindow: return false
-    of PaneSplitV:
-      if pane.selected:
-        return pane.pane_b.select_left()
-      else:
-        return pane.pane_a.select_left()
-    of PaneSplitH:
-      if pane.selected:
-        if not pane.pane_b.select_left():
-          pane.selected = false
-        return true
-      else:
-        return pane.pane_a.select_left()
+proc open_window*(panes: var Panes[Window], window: Window) =
+  panes.children[panes.selected] = window
 
-proc select_right*(pane: Pane): bool =
-  case pane.kind:
-    of PaneWindow: return false
-    of PaneSplitV:
-      if pane.selected:
-        return pane.pane_b.select_right()
-      else:
-        return pane.pane_a.select_right()
-    of PaneSplitH:
-      if pane.selected:
-        return pane.pane_b.select_right()
-      else:
-        if not pane.pane_a.select_right():
-          pane.selected = true
-        return true
+proc open_window*[T](panes: var Panes[T], window: Window) =
+  panes.children[panes.selected].open_window(window)
 
-proc close_active_pane*(pane: Pane) = 
-  if pane.kind != PaneSplitH and pane.kind != PaneSplitV:
+proc active_window*(window: Window): Window = window
+
+proc active_window*[T](panes: Panes[T]): Window =  
+  result = panes.children[panes.selected].active_window()
+
+proc adjust_sizes*[T](panes: var Panes[T]) =
+  var total: float64 = 0.0
+  for size in panes.sizes:
+    total += size
+  for size in panes.sizes.mitems:
+    size /= total
+
+proc constrain_selected*[T](panes: var Panes[T]) =
+  panes.selected = panes.selected.min(panes.children.len - 1).max(0)
+
+proc close_active_window*(panes: var Panes[Panes[Window]]) =
+  template active_column: var Panes[Window] = panes.children[panes.selected]
+  if panes.children.len == 1 and
+     active_column.children.len == 1:
     return
-  
-  if pane.selected:
-    if pane.pane_b.kind == PaneWindow:
-      pane.pane_b.window.close()
-      pane[] = pane.pane_a[]
-    else:
-      pane.pane_b.close_active_pane()
+  active_column.children.delete(active_column.selected)
+  active_column.sizes.delete(active_column.selected)
+  active_column.adjust_sizes()
+  active_column.constrain_selected()
+  if active_column.children.len == 0:
+    panes.children.delete(panes.selected)
+    panes.sizes.delete(panes.selected)
+    panes.adjust_sizes()
+    panes.constrain_selected()
+
+proc process_mouse*(panes: Panes[Window], mouse: Mouse) =
+  discard panes.children[panes.selected].process_mouse(mouse)
+
+proc process_mouse*[T](panes: Panes[T], mouse: Mouse) =
+  panes.children[panes.selected].process_mouse(mouse)
+
+proc process_key*[T](panes: Panes[T], key: Key) =
+  panes.children[panes.selected].process_key(key)
+
+proc render*[T](panes: Panes[T], box: Box, ren: var TermRenderer) =
+  var offset = 0
+  for it, child in panes.children:
+    let space = int(panes.sizes[it] * float64(box.size[panes.axis]))
+    var child_box = Box()
+    child_box.min[not panes.axis] = box.min[not panes.axis]
+    child_box.max[not panes.axis] = box.max[not panes.axis]
+    child_box.min[panes.axis] = offset + box.min[panes.axis]
+    child_box.max[panes.axis] = offset + space + box.min[panes.axis]
+    if it == panes.children.len - 1:
+      child_box.max[panes.axis] = box.max[panes.axis]
+    child.render(child_box, ren)
+    offset += space
+
+proc add*[T](panes: var Panes[T], child: T, size: float64 = 1) =
+  panes.children.add(child)
+  panes.sizes.add(size)
+
+proc select*[T](panes: var Panes[T], dir: Direction) =
+  if panes.axis == dir.to_axis():
+    panes.selected += dir.on_axis()
+    panes.constrain_selected()
   else:
-    if pane.pane_a.kind == PaneWindow:
-      pane.pane_a.window.close()
-      pane[] = pane.pane_b[]
-    else:
-      pane.pane_a.close_active_pane()
+    when T isnot Window:
+      panes.children[panes.selected].select(dir)
 
-proc split*(pane: Pane, dir: Direction, app: App) =
-  case pane.kind:
-    of PaneWindow:
-      case dir:
-        of DirUp, DirDown:
-          pane[] = PaneObj(
-            kind: PaneSplitV,
-            factor: 0.5,
-            pane_a: Pane(kind: PaneWindow, window: if dir == DirUp: app.make_window() else: pane.window),
-            pane_b: Pane(kind: PaneWindow, window: if dir == DirDown: app.make_window() else: pane.window),
-            selected: dir == DirDown
-          )
-        of DirLeft, DirRight:
-          pane[] = PaneObj(
-            kind: PaneSplitH,
-            factor: 0.5,
-            pane_a: Pane(kind: PaneWindow, window: if dir == DirLeft: app.make_window() else: pane.window),
-            pane_b: Pane(kind: PaneWindow, window: if dir == DirRight: app.make_window() else: pane.window),
-            selected: dir == DirRight
-          )
-    of PaneSplitH, PaneSplitV:
-      if pane.selected:
-        pane.pane_b.split(dir, app)
-      else:
-        pane.pane_a.split(dir, app)
+proc split*[T](panes: var Panes[T], child: T, index: int) =
+  panes.children.insert(child, index)
+  panes.sizes.insert(0.0, index)
+  for size in panes.sizes.mitems:
+    size = 1 / panes.sizes.len
 
-proc open_window*(pane: Pane, window: Window) =
-  case pane.kind:
-    of PaneWindow:
-      pane.window = window
-    of PaneSplitH, PaneSplitV:
-      if pane.selected:
-        pane.pane_b.open_window(window)
-      else:
-        pane.pane_a.open_window(window)
+proc split*(panes: var Panes[Window], dir: Direction, app: App) =
+  let offset = (dir.on_axis() + 1) div 2
+  panes.split(app.make_window(), panes.selected + offset)
+  panes.selected += offset
 
-proc active_window*(pane: Pane): Window =  
-  case pane.kind:
-    of PaneWindow:
-      return pane.window
-    else:
-      if pane.selected:
-        return pane.pane_b.active_window()
-      else:
-        return pane.pane_a.active_window()
-
-proc process_mouse*(pane: Pane, mouse: Mouse, box: Box): (int, int) =
-  case pane.kind:
-    of PaneWindow:
-      if pane.is_dragging:
-        if mouse.kind == MouseUp:
-          pane.is_dragging = false
-        return (0, 0)
-      else:
-        var mouse_rel = mouse
-        mouse_rel.x -= box.min.x
-        mouse_rel.y -= box.min.y
-        if pane.window.process_mouse(mouse_rel) and mouse.kind == MouseDown:
-          pane.is_dragging = true
-        return (-1, -1)
-    of PaneSplitH:
-      let
-        split = int(float64(box.size.x) * pane.factor) + box.min.x
-        right = Box(min: Index2d(x: split, y: box.min.y), max: box.max)
-        left = Box(min: box.min, max: Index2d(x: split, y: box.max.y))
-      var res = (-1, -1)
-      if mouse.kind == MouseDown or mouse.kind == MouseScroll:
-        if left.is_inside(mouse.pos):
-          if mouse.kind == MouseDown:
-            pane.selected = false
-          res = pane.pane_a.process_mouse(mouse, left)
-        else:
-          if mouse.kind == MouseDown:
-            pane.selected = true
-          res = pane.pane_b.process_mouse(mouse, right)
-          if res[0] != -1:
-            res[0] += 1
-      else:
-        if pane.selected:
-          res = pane.pane_b.process_mouse(mouse, right)
-          if res[0] != -1:
-            res[0] += 1
-        else:
-          res = pane.pane_a.process_mouse(mouse, left)
-      if res[0] == 1:
-        pane.factor = (mouse.x - box.min.x) / box.size.x
-        pane.factor = pane.factor.max(0).min(1)
-        return (-1, res[1])
-      return res
-    of PaneSplitV:
-      let
-        split = int(float64(box.size.y) * pane.factor) + box.min.y
-        bottom = Box(min: Index2d(x: box.min.x, y: split), max: box.max)
-        top = Box(min: box.min, max: Index2d(x: box.max.x, y: split))
-      var res = (-1, -1)
-      if mouse.kind == MouseDown or mouse.kind == MouseScroll:
-        if top.is_inside(mouse.pos):
-          if mouse.kind == MouseDown:
-            pane.selected = false
-          res = pane.pane_a.process_mouse(mouse, top)
-        else:
-          if mouse.kind == MouseDown:
-            pane.selected = true
-          res = pane.pane_b.process_mouse(mouse, bottom)
-          if res[1] != -1:
-            res[1] += 1
-      else:
-        if pane.selected:
-          res = pane.pane_b.process_mouse(mouse, bottom)
-          if res[1] != -1:
-            res[1] += 1
-        else:
-          res = pane.pane_a.process_mouse(mouse, top)
-      if res[1] == 1:
-        pane.factor = (mouse.y - box.min.y) / box.size.y
-        pane.factor = pane.factor.max(0).min(1)
-        return (res[0], -1)
-      return res
-
-proc process_key*(pane: Pane, key: Key) =
-  case pane.kind:
-    of PaneWindow:
-      pane.window.process_key(key)
-    of PaneSplitH, PaneSplitV:
-      if pane.selected:
-        pane.pane_b.process_key(key)
-      else:
-        pane.pane_a.process_key(key)
-        
-proc render*(pane: Pane, box: Box, ren: var TermRenderer) =
-  case pane.kind:
-    of PaneWindow:
-      ren.clip(box)
-      pane.window.render(box, ren)
-    of PaneSplitH:
-      let split = int(float64(box.size.x) * pane.factor) + box.min.x
-      pane.pane_a.render(Box(min: box.min, max: Index2d(x: split, y: box.max.y)), ren)
-      pane.pane_b.render(Box(min: Index2d(x: split, y: box.min.y), max: box.max), ren)
-    of PaneSplitV:
-      let split = int(float64(box.size.y) * pane.factor) + box.min.y
-      pane.pane_a.render(Box(min: box.min, max: Index2d(x: box.max.x, y: split)), ren)
-      pane.pane_b.render(Box(min: Index2d(x: box.min.x, y: split), max: box.max), ren)
-
-proc render*(pane: Pane, ren: var TermRenderer) = 
-  pane.render(Box(
-    min: Index2d(x: 0, y: 0),
-    max: Index2d(x: ren.screen.width, y: ren.screen.height)
-  ), ren)
+proc split*(panes: var Panes[Panes[Window]], dir: Direction, app: App) =
+  if panes.axis == dir.to_axis():
+    let offset = (dir.on_axis() + 1) div 2
+    let child = init_panes(not panes.axis, @[app.make_window()])
+    panes.split(child, panes.selected + offset)
+    panes.selected += offset
+  else:
+    panes.children[panes.selected].split(dir, app)
 
 # App
 proc open_launcher(app: App) =
-  app.root_pane.open_window(app.new_launcher())
+  app.columns.open_window(app.new_launcher())
 
 proc open_command_search(app: App) =
-  app.root_pane.open_window(app.new_command_search(app.root_pane.active_window()))
+  app.columns.open_window(app.new_command_search(app.columns.active_window()))
 
-proc make_app*(languages: seq[Language], window_constructors: seq[WindowConstructor]): owned App =
+proc new_app*(languages: seq[Language], window_constructors: seq[WindowConstructor]): owned App =
   for it, lang in languages.pairs:
     lang.id = it
-  return App(
+  result = App(
     copy_buffer: new_copy_buffer(),
-    root_pane: nil,
+    columns: Panes[Panes[Window]](axis: AxisX),
     languages: languages,
     window_constructors: window_constructors,
     buffers: init_table[string, Buffer](),
-    log: make_log()
+    log: new_log()
   )
 
 proc get_autocompleter*(app: App, language: Language): Autocompleter =
@@ -486,7 +350,7 @@ proc list_changed*(app: App): seq[string] =
       result.add(path)
 
 proc process_mouse*(app: App, mouse: Mouse, size: Index2d) =
-  discard app.root_pane.process_mouse(mouse, Box(max: size))
+  app.columns.process_mouse(mouse)#, Box(max: size))
 
 proc close*(app: App) =
   for comp in app.autocompleters.values:
@@ -510,13 +374,13 @@ proc process_key*(app: App, key: Key): bool =
     of AppModeNewPane:
       case key.kind:
         of KeyArrowDown:
-          app.root_pane.split(DirDown, app)
+          app.columns.split(DirDown, app)
         of KeyArrowUp:
-          app.root_pane.split(DirUp, app)
+          app.columns.split(DirUp, app)
         of KeyArrowLeft:
-          app.root_pane.split(DirLeft, app)
+          app.columns.split(DirLeft, app)
         of KeyArrowRight:
-          app.root_pane.split(DirRight, app)
+          app.columns.split(DirRight, app)
         of KeyNone:
           return false
         else: discard
@@ -530,10 +394,10 @@ proc process_key*(app: App, key: Key): bool =
             return
           elif key.chr == Rune('a'):
             app.open_launcher()
-        of KeyArrowUp: discard app.root_pane.select_above()
-        of KeyArrowDown: discard app.root_pane.select_below()
-        of KeyArrowLeft: discard app.root_pane.select_left()
-        of KeyArrowRight: discard app.root_pane.select_right()
+        of KeyArrowUp: app.columns.select(DirUp)
+        of KeyArrowDown: app.columns.select(DirDown)
+        of KeyArrowLeft: app.columns.select(DirLeft)
+        of KeyArrowRight: app.columns.select(DirRight)
         of KeyNone:
           return false
         else: discard
@@ -548,7 +412,7 @@ proc process_key*(app: App, key: Key): bool =
             case key.chr:
               of Rune('q'): return true
               of Rune('w'):
-                app.root_pane.close_active_pane()
+                app.columns.close_active_window()
                 return
               of Rune('p'):
                 app.mode = AppModePane
@@ -556,28 +420,28 @@ proc process_key*(app: App, key: Key): bool =
               else:  discard
         of KeyArrowDown:
           if key.alt and not key.shift and not key.ctrl:
-            discard app.root_pane.select_below()
+            app.columns.select(DirDown)
             return
         of KeyArrowUp: 
           if key.alt and not key.shift and not key.ctrl:
-            discard app.root_pane.select_above()
+            app.columns.select(DirUp)
             return
         of KeyArrowLeft:
           if key.alt and not key.shift and not key.ctrl:
-            discard app.root_pane.select_left()
+            app.columns.select(DirLeft)
             return
         of KeyArrowRight:
           if key.alt and not key.shift and not key.ctrl:
-            discard app.root_pane.select_right()
+            app.columns.select(DirRight)
             return
         of KeyFn:
           if key.fn == 1:
             app.open_command_search()
             return
         else: discard
-      app.root_pane.process_key(key)
+      app.columns.process_key(key)
       return false
 
 proc render*(app: App, ren: var TermRenderer) =
   ren.clear()
-  app.root_pane.render(ren)
+  app.columns.render(Box(max: ren.screen.size), ren)
