@@ -84,7 +84,7 @@ method list_defs*(ctx: Context,
   ctx.symbols[buffer] = defs
   callback(defs)
 
-proc make_nim_autocompleter*(log: Log): Context =
+proc make_nim_autocompleter*(log: Log): Autocompleter =
   Context(
     log: log,
     max_symbols: 2048,
