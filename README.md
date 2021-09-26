@@ -8,7 +8,7 @@ A text editor written in Nim.
 - Unicode Support (utf-8)
 - Syntax Highlighting
 - Multiple Windows
-- Autocompletion using Nimsuggest
+- Autocompletion
 - Mouse Support
 
 ## Installation

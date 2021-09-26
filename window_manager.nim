@@ -243,16 +243,13 @@ proc close_active_window*(panes: var Panes[Panes[Window]]) =
     panes.adjust_sizes()
     panes.constrain_selected()
 
-proc process_mouse*(panes: Panes[Window], mouse: Mouse) =
-  discard panes.children[panes.selected].process_mouse(mouse)
+proc process_mouse*(window: Window, mouse: Mouse, box: Box) =
+  var mouse_rel = mouse
+  mouse_rel.x -= box.min.x
+  mouse_rel.y -= box.min.y
+  discard window.process_mouse(mouse_rel)
 
-proc process_mouse*[T](panes: Panes[T], mouse: Mouse) =
-  panes.children[panes.selected].process_mouse(mouse)
-
-proc process_key*[T](panes: Panes[T], key: Key) =
-  panes.children[panes.selected].process_key(key)
-
-proc render*[T](panes: Panes[T], box: Box, ren: var TermRenderer) =
+iterator iter_layout[T](panes: Panes[T], box: Box): (int, Box, T) =
   var offset = 0
   for it, child in panes.children:
     let space = int(panes.sizes[it] * float64(box.size[panes.axis]))
@@ -263,8 +260,23 @@ proc render*[T](panes: Panes[T], box: Box, ren: var TermRenderer) =
     child_box.max[panes.axis] = offset + space + box.min[panes.axis]
     if it == panes.children.len - 1:
       child_box.max[panes.axis] = box.max[panes.axis]
-    child.render(child_box, ren)
+    yield (it, child_box, child)
     offset += space
+
+proc process_mouse*[T](panes: var Panes[T], mouse: Mouse, box: Box) =
+  for it, child_box, child in panes.iter_layout(box):
+    if child_box.is_inside(mouse.pos):
+      if mouse.kind == MouseDown:
+        panes.selected = it
+      panes.children[it].process_mouse(mouse, child_box)
+      break
+
+proc process_key*[T](panes: Panes[T], key: Key) =
+  panes.children[panes.selected].process_key(key)
+
+proc render*[T](panes: Panes[T], box: Box, ren: var TermRenderer) =
+  for it, child_box, child in panes.iter_layout(box):
+    child.render(child_box, ren)
 
 proc add*[T](panes: var Panes[T], child: T, size: float64 = 1) =
   panes.children.add(child)
@@ -350,7 +362,7 @@ proc list_changed*(app: App): seq[string] =
       result.add(path)
 
 proc process_mouse*(app: App, mouse: Mouse, size: Index2d) =
-  app.columns.process_mouse(mouse)#, Box(max: size))
+  app.columns.process_mouse(mouse, Box(max: size))
 
 proc close*(app: App) =
   for comp in app.autocompleters.values:
