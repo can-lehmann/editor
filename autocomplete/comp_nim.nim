@@ -67,7 +67,7 @@ method complete*(ctx: Context,
   var comps: seq[Symbol] = @[]
   if buffer in ctx.symbols:
     for symbol in ctx.symbols[buffer]:
-      if symbol.name.find(query) != -1:
+      if query in symbol.name:
         comps.add(symbol)
   callback(comps)
 

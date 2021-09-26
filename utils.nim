@@ -62,29 +62,29 @@ proc substr*(text: seq[Rune], first: int): seq[Rune] =
 
 proc substr*(text: seq[Rune], first, last: int): seq[Rune] =
   result = new_seq[Rune](last - first + 1)
-  
   var it2 = 0
   for it in max(first, 0)..min(last, text.len - 1):
     result[it2] = text[it]
     it2 += 1
 
 proc pattern_at*(text, pattern: seq[Rune], pos: int): bool =
-  if pos + pattern.len > text.len:
-    return false
-  
-  for it in 0..<pattern.len:
-    if text[it + pos] != pattern[it]:
-      return false
-  return true
+  if pos + pattern.len <= text.len:
+    result = true
+    for it in 0..<pattern.len:
+      if text[it + pos] != pattern[it]:
+        return false
 
 proc pattern_at*(text: seq[Rune], pattern: string, pos: int): bool =
   return text.pattern_at(pattern.to_runes(), pos)
 
 proc find*(text: seq[Rune], pattern: seq[Rune], start: int = 0): int =
+  result = -1
   for it in start..<(text.len - pattern.len + 1):
     if text.pattern_at(pattern, it):
       return it
-  return -1
+
+proc contains*(text: seq[Rune], pattern: seq[Rune]): bool =
+  result = text.find(pattern) != -1
 
 proc find_all*(text: seq[Rune], pattern: seq[Rune]): seq[int] =
   for it in 0..<(text.len - pattern.len + 1):

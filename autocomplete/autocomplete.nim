@@ -48,7 +48,7 @@ method complete*(ctx: SimpleContext,
   let query = ctx.extract_query(buffer, pos)
   var completions: seq[Symbol]
   for comp in ctx.comps:
-    if comp.name.find(query) != -1:
+    if query in comp.name:
       completions.add(comp)
   callback(completions)
 
