@@ -260,6 +260,8 @@ proc set_path*(buffer: Buffer, path: string, langs: seq[Language] = @[]) =
     buffer.tokens = @[]
     buffer.tokens_done = false
     buffer.language = langs.detect_language(path)
+    if not buffer.language.is_nil and buffer.text.len == 0:
+      buffer.indent_width = buffer.language.indent_width
 
 proc file_name*(buffer: Buffer): string =
   let dirs = buffer.file_path.split("/")
@@ -559,11 +561,12 @@ proc to_runes*(newline_style: NewlineStyle): seq[Rune] =
     of NewlineLf: return @[Rune('\n')]
     of NewlineCrLf: return @[Rune('\r'), Rune('\n')]
 
-proc guess_indent_width(text: seq[Rune]): int =
+proc guess_indent_width(text: seq[Rune], preference: int): int =
   var
     is_indent = true
     width = 0
     indents = init_table[int, int]()
+  indents[preference] = 1
   for it, chr in text:
     if chr == '\n':
       is_indent = true
@@ -659,10 +662,10 @@ proc new_buffer*(path: string, lang: Language = nil): Buffer =
     indent_style = text.guess_indent_style()
     newline_style = text.guess_newline_style()
   var indent_width = 2
-  if indent_style == IndentSpaces:
-    indent_width = text.guess_indent_width()
-  elif not lang.is_nil:
+  if not lang.is_nil:
     indent_width = lang.indent_width
+  if indent_style == IndentSpaces:
+    indent_width = text.guess_indent_width(indent_width)
   return Buffer(
     file_path: path,
     text: text,

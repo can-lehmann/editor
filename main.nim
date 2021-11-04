@@ -49,6 +49,11 @@ var
       indent_width: 2
     ),
     Language(
+      name: "Java",
+      file_exts: @["java"],
+      indent_width: 4
+    ),
+    Language(
       name: "CSS",
       file_exts: @["css"],
       indent_width: 2,
